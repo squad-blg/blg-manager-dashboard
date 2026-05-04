@@ -1,0 +1,204 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* BLG brand — deep forest green surfaces, lime green accent */
+    --background: 150 18% 8%;
+    --foreground: 140 15% 90%;
+
+    --card: 150 16% 10%;
+    --card-foreground: 140 15% 90%;
+
+    --popover: 150 16% 10%;
+    --popover-foreground: 140 15% 90%;
+
+    --primary: 93 48% 55%;
+    --primary-foreground: 150 18% 8%;
+
+    --secondary: 150 14% 15%;
+    --secondary-foreground: 140 10% 72%;
+
+    --muted: 150 14% 13%;
+    --muted-foreground: 140 8% 52%;
+
+    --accent: 93 48% 55%;
+    --accent-foreground: 150 18% 8%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 150 12% 17%;
+    --input: 150 12% 17%;
+    --ring: 93 48% 55%;
+
+    --radius: 0.5rem;
+
+    /* Chart colors — BLG green-anchored palette */
+    --chart-1: 93 48% 55%;
+    --chart-2: 160 55% 42%;
+    --chart-3: 37 91% 55%;
+    --chart-4: 280 50% 60%;
+    --chart-5: 340 65% 55%;
+
+    /* Manager colors (accent pills) */
+    --jarvis: 93 48% 55%;
+    --jan: 160 55% 42%;
+    --adriana: 37 91% 55%;
+
+    /* Platform badge colors */
+    --ers: 93 48% 55%;
+    --io: 160 55% 42%;
+    --ecomm: 37 91% 55%;
+    --leadgen: 280 50% 60%;
+  }
+
+  /* ── Light mode overrides ── */
+  html.light {
+    --background: 150 20% 97%;
+    --foreground: 150 25% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 150 25% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 150 25% 12%;
+
+    --primary: 93 48% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 150 14% 92%;
+    --secondary-foreground: 150 20% 20%;
+
+    --muted: 150 12% 94%;
+    --muted-foreground: 150 10% 45%;
+
+    --accent: 93 48% 40%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 150 12% 84%;
+    --input: 150 12% 84%;
+    --ring: 93 48% 40%;
+
+    /* Chart colors — slightly deeper for legibility on white */
+    --chart-1: 93 48% 40%;
+    --chart-2: 160 55% 34%;
+    --chart-3: 37 85% 45%;
+    --chart-4: 280 50% 52%;
+    --chart-5: 340 65% 48%;
+
+    /* Manager colors */
+    --jarvis: 93 48% 40%;
+    --jan: 160 55% 34%;
+    --adriana: 37 85% 45%;
+
+    /* Platform badges */
+    --ers: 93 48% 40%;
+    --io: 160 55% 34%;
+    --ecomm: 37 85% 45%;
+    --leadgen: 280 50% 52%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', 'DM Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    height: 100%;
+  }
+}
+
+/* Tabular numbers for all data values */
+.tabular-nums {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Dashboard layout */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  grid-template-rows: 1fr;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.sidebar {
+  grid-row: 1 / -1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-right: 1px solid hsl(var(--border));
+}
+
+.main-area {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Smooth delta counters */
+@keyframes count-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-count {
+  animation: count-up 0.4s ease forwards;
+}
+
+/* KPI card hover */
+.kpi-card {
+  transition: box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1), border-color 180ms;
+}
+.kpi-card:hover {
+  border-color: hsl(var(--primary) / 0.4);
+  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.15), 0 4px 16px hsl(var(--primary) / 0.08);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+
+/* Content visibility for performance */
+.card-grid > * {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 160px;
+}
+
+/* Platform badge colors */
+.badge-ERS { background: hsl(var(--ers) / 0.15); color: hsl(var(--ers)); border-color: hsl(var(--ers) / 0.3); }
+.badge-IO { background: hsl(var(--io) / 0.15); color: hsl(var(--io)); border-color: hsl(var(--io) / 0.3); }
+.badge-ECOMM { background: hsl(var(--ecomm) / 0.15); color: hsl(var(--ecomm)); border-color: hsl(var(--ecomm) / 0.3); }
+.badge-LEADGEN { background: hsl(var(--leadgen) / 0.15); color: hsl(var(--leadgen)); border-color: hsl(var(--leadgen) / 0.3); }
