@@ -328,7 +328,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   const ga4 = await fetchGA4Metrics(googleAccessToken, client.ga4PropertyId, startDate, endDate);
                   sessions = ga4.sessions;
                 } catch (e: any) {
-                  console.error(`[sync] ${client.name} GA4:`, e.message);
+                  console.error(`[sync] ${client.name} GA4:`, e.message, e.response?.data ? JSON.stringify(e.response.data).slice(0,300) : '');
                 }
               }
               // Upsert analytics with ad spend + sessions
@@ -355,11 +355,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             try {
               const m = await fetchMetaAdsMetrics(client.metaAdAccountId, metaCreds.key, startDate, endDate);
               const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === targetPeriod);
+              // Combine Meta spend with any existing Google Ads spend (don't overwrite)
+              const combinedSpend = Math.round(((existing?.adSpend ?? 0) + m.adSpend) * 100) / 100;
+              const combinedLeads = (existing?.leads ?? 0) + m.leads;
               storage.upsertAnalyticsSnapshot({
                 clientId: client.id, period: targetPeriod, periodType: "month",
-                adSpend: m.adSpend,
-                leads: m.leads,
-                costPerLead: m.costPerLead,
+                adSpend: combinedSpend,
+                leads: combinedLeads,
+                costPerLead: combinedLeads > 0 ? Math.round((combinedSpend / combinedLeads) * 100) / 100 : 0,
                 sessions: existing?.sessions ?? 0,
                 conversions: existing?.conversions ?? 0,
                 conversionRate: existing?.conversionRate ?? 0,
@@ -367,7 +370,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 clicks: existing?.clicks ?? 0,
                 fetchedAt,
               });
-              console.log(`[sync] ${client.name} Meta: spend=$${m.adSpend} leads=${m.leads}`);
+              console.log(`[sync] ${client.name} Meta: spend=$${m.adSpend} leads=${m.leads} (combined total spend=$${combinedSpend})`);
             } catch (e: any) {
               console.error(`[sync] ${client.name} Meta:`, e.message, e.response?.data ? JSON.stringify(e.response.data).slice(0,500) : '');
             }
