@@ -14,12 +14,19 @@ import axios from "axios";
 // ─── Token cache ──────────────────────────────────────────────────────────────
 let cachedAccessToken: string | null = null;
 let tokenExpiresAt = 0;
+let cachedRefreshToken: string | null = null;
 
 export async function getGoogleAccessToken(
   clientId: string,
   clientSecret: string,
   refreshToken: string
 ): Promise<string> {
+  // Invalidate cache if refresh token changed (e.g. user updated credentials)
+  if (cachedRefreshToken !== refreshToken) {
+    cachedAccessToken = null;
+    tokenExpiresAt = 0;
+    cachedRefreshToken = refreshToken;
+  }
   if (cachedAccessToken && Date.now() < tokenExpiresAt - 60_000) {
     return cachedAccessToken;
   }
