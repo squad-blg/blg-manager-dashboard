@@ -346,7 +346,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               });
               console.log(`[sync] ${client.name} Google Ads: spend=$${ads.adSpend} conversions=${ads.conversions}${!hasOwnRevenuePlatform ? ` revenue=$${ads.revenue}` : ' (revenue from primary platform)'}`);
             } catch (e: any) {
-              console.error(`[sync] ${client.name} Google Ads:`, e.message);
+              console.error(`[sync] ${client.name} Google Ads:`, e.message, e.response?.data ? JSON.stringify(e.response.data).slice(0,500) : '');
             }
           }
 
@@ -369,7 +369,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               });
               console.log(`[sync] ${client.name} Meta: spend=$${m.adSpend} leads=${m.leads}`);
             } catch (e: any) {
-              console.error(`[sync] ${client.name} Meta:`, e.message);
+              console.error(`[sync] ${client.name} Meta:`, e.message, e.response?.data ? JSON.stringify(e.response.data).slice(0,500) : '');
             }
           }
         } catch (e: any) {
