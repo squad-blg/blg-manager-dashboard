@@ -291,8 +291,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
           // ── ERS ────────────────────────────────────────────────────────
           if (client.platform === "ERS" && client.ersFolder && client.ersApiKey && client.ersDevKey) {
-            const m = await fetchERSMetrics(client.ersFolder, client.ersApiKey, client.ersDevKey, startDate, endDate);
-            storage.upsertRevenueSnapshot({ clientId: client.id, period: targetPeriod, periodType: "month", revenue: m.revenue, orderCount: m.orderCount, fetchedAt });
+            try {
+              const m = await fetchERSMetrics(client.ersFolder, client.ersApiKey, client.ersDevKey, startDate, endDate);
+              storage.upsertRevenueSnapshot({ clientId: client.id, period: targetPeriod, periodType: "month", revenue: m.revenue, orderCount: m.orderCount, fetchedAt });
+              console.log(`[sync] ${client.name} ERS: orders=${m.orderCount} revenue=$${m.revenue}`);
+            } catch (e: any) {
+              console.error(`[sync] ${client.name} ERS:`, e.message);
+            }
           }
 
           // ── IO ─────────────────────────────────────────────────────────
@@ -303,54 +308,72 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
           // ── Google Ads + GA4 ───────────────────────────────────────────
           if (googleAccessToken && client.googleAdsCustomerId) {
-            const ads = await fetchGoogleAdsMetrics(
-              googleAccessToken,
-              client.googleAdsCustomerId,
-              mccId?.key ?? client.googleAdsCustomerId,
-              startDate, endDate
-            );
-            // Revenue from conversion value
-            storage.upsertRevenueSnapshot({ clientId: client.id, period: targetPeriod, periodType: "month", revenue: ads.revenue, orderCount: ads.conversions, fetchedAt });
+            try {
+              const ads = await fetchGoogleAdsMetrics(
+                googleAccessToken,
+                client.googleAdsCustomerId,
+                mccId?.key ?? client.googleAdsCustomerId,
+                startDate, endDate
+              );
+              // Only write revenue from Google Ads if this client's primary
+              // revenue platform is NOT ERS or IO (those have their own revenue source)
+              const hasOwnRevenuePlatform = client.platform === "ERS" || client.platform === "IO";
+              if (!hasOwnRevenuePlatform) {
+                storage.upsertRevenueSnapshot({ clientId: client.id, period: targetPeriod, periodType: "month", revenue: ads.revenue, orderCount: ads.conversions, fetchedAt });
+              }
 
-            let sessions = 0;
-            if (client.ga4PropertyId) {
-              const ga4 = await fetchGA4Metrics(googleAccessToken, client.ga4PropertyId, startDate, endDate);
-              sessions = ga4.sessions;
+              let sessions = 0;
+              if (client.ga4PropertyId) {
+                try {
+                  const ga4 = await fetchGA4Metrics(googleAccessToken, client.ga4PropertyId, startDate, endDate);
+                  sessions = ga4.sessions;
+                } catch (e: any) {
+                  console.error(`[sync] ${client.name} GA4:`, e.message);
+                }
+              }
+              // Upsert analytics with ad spend + sessions
+              const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === targetPeriod);
+              storage.upsertAnalyticsSnapshot({
+                clientId: client.id, period: targetPeriod, periodType: "month",
+                adSpend: ads.adSpend, sessions,
+                conversions: ads.conversions,
+                leads: existing?.leads ?? 0,
+                costPerLead: existing?.costPerLead ?? 0,
+                conversionRate: existing?.conversionRate ?? 0,
+                impressions: existing?.impressions ?? 0,
+                clicks: existing?.clicks ?? 0,
+                fetchedAt,
+              });
+              console.log(`[sync] ${client.name} Google Ads: spend=$${ads.adSpend} conversions=${ads.conversions}${!hasOwnRevenuePlatform ? ` revenue=$${ads.revenue}` : ' (revenue from primary platform)'}`);
+            } catch (e: any) {
+              console.error(`[sync] ${client.name} Google Ads:`, e.message);
             }
-            // Upsert analytics with ad spend + sessions
-            const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === targetPeriod);
-            storage.upsertAnalyticsSnapshot({
-              clientId: client.id, period: targetPeriod, periodType: "month",
-              adSpend: ads.adSpend, sessions,
-              conversions: ads.conversions,
-              leads: existing?.leads ?? 0,
-              costPerLead: existing?.costPerLead ?? 0,
-              conversionRate: existing?.conversionRate ?? 0,
-              impressions: existing?.impressions ?? 0,
-              clicks: existing?.clicks ?? 0,
-              fetchedAt,
-            });
           }
 
           // ── Meta Ads ───────────────────────────────────────────────────
           if (metaCreds && client.metaAdAccountId) {
-            const m = await fetchMetaAdsMetrics(client.metaAdAccountId, metaCreds.key, startDate, endDate);
-            const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === targetPeriod);
-            storage.upsertAnalyticsSnapshot({
-              clientId: client.id, period: targetPeriod, periodType: "month",
-              adSpend: m.adSpend,
-              leads: m.leads,
-              costPerLead: m.costPerLead,
-              sessions: existing?.sessions ?? 0,
-              conversions: existing?.conversions ?? 0,
-              conversionRate: existing?.conversionRate ?? 0,
-              impressions: existing?.impressions ?? 0,
-              clicks: existing?.clicks ?? 0,
-              fetchedAt,
-            });
+            try {
+              const m = await fetchMetaAdsMetrics(client.metaAdAccountId, metaCreds.key, startDate, endDate);
+              const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === targetPeriod);
+              storage.upsertAnalyticsSnapshot({
+                clientId: client.id, period: targetPeriod, periodType: "month",
+                adSpend: m.adSpend,
+                leads: m.leads,
+                costPerLead: m.costPerLead,
+                sessions: existing?.sessions ?? 0,
+                conversions: existing?.conversions ?? 0,
+                conversionRate: existing?.conversionRate ?? 0,
+                impressions: existing?.impressions ?? 0,
+                clicks: existing?.clicks ?? 0,
+                fetchedAt,
+              });
+              console.log(`[sync] ${client.name} Meta: spend=$${m.adSpend} leads=${m.leads}`);
+            } catch (e: any) {
+              console.error(`[sync] ${client.name} Meta:`, e.message);
+            }
           }
         } catch (e: any) {
-          console.error(`[sync] ${client.name}:`, e.message);
+          console.error(`[sync] ${client.name} unexpected:`, e.message);
         }
       }
       console.log(`[sync] Period ${targetPeriod} complete.`);

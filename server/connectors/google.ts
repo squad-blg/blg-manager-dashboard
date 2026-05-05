@@ -69,7 +69,7 @@ export async function fetchGoogleAdsMetrics(
     WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
   `;
 
-  const url = `https://googleads.googleapis.com/v17/customers/${customerId}/googleAds:searchStream`;
+  const url = `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`;
   const res = await axios.post(
     url,
     { query },
