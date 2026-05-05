@@ -69,7 +69,11 @@ export async function fetchGoogleAdsMetrics(
     WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
   `;
 
-  const url = `https://googleads.googleapis.com/v17/customers/${customerId}/googleAds:searchStream`;
+  // Strip any dashes from IDs — Google Ads API requires digits only
+  const cleanCustomerId = customerId.replace(/-/g, "");
+  const cleanManagerId = managerCustomerId.replace(/-/g, "");
+  const url = `https://googleads.googleapis.com/v20/customers/${cleanCustomerId}/googleAds:searchStream`;
+  console.log(`[google-ads] POST ${url} login-customer-id=${cleanManagerId} dev-token-set=${!!process.env.GOOGLE_ADS_DEVELOPER_TOKEN}`);
   const res = await axios.post(
     url,
     { query },
@@ -77,7 +81,7 @@ export async function fetchGoogleAdsMetrics(
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "developer-token": process.env.GOOGLE_ADS_DEVELOPER_TOKEN ?? "",
-        "login-customer-id": managerCustomerId,
+        "login-customer-id": cleanManagerId,
         "Content-Type": "application/json",
       },
       timeout: 20_000,
