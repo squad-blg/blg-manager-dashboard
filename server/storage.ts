@@ -102,19 +102,9 @@ try { sqlite.exec(`ALTER TABLE clients ADD COLUMN ers_dev_key TEXT`); } catch {}
 const managerCount = sqlite.prepare("SELECT COUNT(*) as count FROM managers").get() as { count: number };
 if (managerCount.count === 0) {
   sqlite.exec(`
-    INSERT INTO managers VALUES ('jarvis', 'Jarvis Gatlin', 'jarvis@bestlyfegroup.com', '#7DC242');
-    INSERT INTO managers VALUES ('jan', 'Jan Feterman', 'jan@bestlyfegroup.com', '#4A8C1C');
-    INSERT INTO managers VALUES ('adriana', 'Adriana Zendan', 'adriana@bestlyfegroup.com', '#F59E0B');
-
-    -- Sample clients — replace with real client data
-    INSERT INTO clients VALUES ('client-01', 'Rockin Bounce', 'jarvis', 'ERS', 'rockinbounce', NULL, NULL, NULL, NULL, 'Lakeland, FL', 1, '2026-04-10', 'Monthly check-in call');
-    INSERT INTO clients VALUES ('client-02', 'A&G Tent', 'jarvis', 'ERS', 'aandgtent', NULL, NULL, NULL, NULL, 'Lakeland, FL', 1, '2026-03-28', 'Reviewed spring campaign');
-    INSERT INTO clients VALUES ('client-03', 'Jump Zone', 'jan', 'IO', NULL, NULL, 'jz-001', NULL, NULL, 'Sacramento, CA', 1, '2026-04-12', 'Strategy call');
-    INSERT INTO clients VALUES ('client-04', 'Bounce Kings', 'jan', 'ERS', 'bouncekings', NULL, NULL, NULL, NULL, 'San Diego, CA', 1, '2026-02-15', NULL);
-    INSERT INTO clients VALUES ('client-05', 'Party Palace', 'adriana', 'ECOMM', NULL, NULL, NULL, NULL, 'shopify', 'Greenville, SC', 1, '2026-04-08', 'Onboarding follow-up');
-    INSERT INTO clients VALUES ('client-06', 'Event Pro', 'adriana', 'LEADGEN', NULL, NULL, NULL, 'aa-123', NULL, 'Biloxi, MS', 1, '2026-01-20', NULL);
-    INSERT INTO clients VALUES ('client-07', 'Bounce World', 'adriana', 'IO', NULL, NULL, 'bw-002', NULL, NULL, 'Knoxville, TN', 1, '2026-03-05', 'Upsell discussion');
-    INSERT INTO clients VALUES ('client-08', 'Inflatable Fun', 'jan', 'ERS', 'inflatablefun', NULL, NULL, NULL, NULL, 'Cleveland, GA', 1, '2026-04-01', 'Q1 review');
+    INSERT INTO managers (id, name, email, color) VALUES ('jarvis', 'Jarvis Gatlin', 'jarvis@bestlyfegroup.com', '#7DC242');
+    INSERT INTO managers (id, name, email, color) VALUES ('jan', 'Jan Feterman', 'jan@bestlyfegroup.com', '#4A8C1C');
+    INSERT INTO managers (id, name, email, color) VALUES ('adriana', 'Adriana Zendan', 'adriana@bestlyfegroup.com', '#F59E0B');
   `);
 }
 
