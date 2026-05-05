@@ -3,7 +3,13 @@ import Database from "better-sqlite3";
 import { eq, and, desc } from "drizzle-orm";
 import * as schema from "../shared/schema";
 
-const sqlite = new Database("blg-dashboard-v2.db");
+// Store DB in /app/data on Railway (persisted via volume), fallback to local for dev
+const DB_PATH = process.env.NODE_ENV === "production" ? "/app/data/blg-dashboard.db" : "blg-dashboard.db";
+import fs from "fs";
+if (process.env.NODE_ENV === "production") {
+  fs.mkdirSync("/app/data", { recursive: true });
+}
+const sqlite = new Database(DB_PATH);
 export const db = drizzle(sqlite, { schema });
 
 // Auto-migrate tables
