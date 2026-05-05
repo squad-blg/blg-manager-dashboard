@@ -3,7 +3,7 @@ import Database from "better-sqlite3";
 import { eq, and, desc } from "drizzle-orm";
 import * as schema from "../shared/schema";
 
-const sqlite = new Database("blg-dashboard.db");
+const sqlite = new Database("blg-dashboard-v2.db");
 export const db = drizzle(sqlite, { schema });
 
 // Auto-migrate tables
