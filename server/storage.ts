@@ -96,6 +96,7 @@ try { sqlite.exec(`ALTER TABLE clients ADD COLUMN io_api_key TEXT`); } catch {}
 try { sqlite.exec(`ALTER TABLE clients ADD COLUMN google_ads_customer_id TEXT`); } catch {}
 try { sqlite.exec(`ALTER TABLE clients ADD COLUMN ga4_property_id TEXT`); } catch {}
 try { sqlite.exec(`ALTER TABLE clients ADD COLUMN meta_ad_account_id TEXT`); } catch {}
+try { sqlite.exec(`ALTER TABLE clients ADD COLUMN ers_dev_key TEXT`); } catch {}
 
 // Seed default data if empty
 const managerCount = sqlite.prepare("SELECT COUNT(*) as count FROM managers").get() as { count: number };

@@ -31,6 +31,7 @@ type Client = {
   platform: string;
   ersFolder: string | null;
   ersApiKey: string | null;
+  ersDevKey: string | null;
   ioAccountId: string | null;
   ioApiKey: string | null;
   aaaCampaignId: string | null;
@@ -62,6 +63,7 @@ export default function ClientsPage() {
     platform: "ERS",
     ersFolder: "",
     ersApiKey: "",
+    ersDevKey: "",
     ioAccountId: "",
     ioApiKey: "",
     aaaCampaignId: "",
@@ -139,6 +141,7 @@ export default function ClientsPage() {
       platform: client.platform,
       ersFolder: client.ersFolder ?? "",
       ersApiKey: client.ersApiKey ?? "",
+      ersDevKey: (client as any).ersDevKey ?? "",
       ioAccountId: client.ioAccountId ?? "",
       ioApiKey: client.ioApiKey ?? "",
       aaaCampaignId: client.aaaCampaignId ?? "",
@@ -156,6 +159,7 @@ export default function ClientsPage() {
       ...form,
       ersFolder: form.ersFolder || null,
       ersApiKey: form.ersApiKey || null,
+      ersDevKey: form.ersDevKey || null,
       ioAccountId: form.ioAccountId || null,
       ioApiKey: form.ioApiKey || null,
       aaaCampaignId: form.aaaCampaignId || null,
@@ -359,13 +363,24 @@ export default function ClientsPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">ERS API Key</Label>
+                  <Label className="text-xs text-muted-foreground">ERS API Token</Label>
                   <Input
                     data-testid="input-ers-apikey"
                     type="password"
                     value={form.ersApiKey}
                     onChange={(e) => setForm({ ...form, ersApiKey: e.target.value })}
-                    placeholder="From Admin > API Info"
+                    placeholder="From Admin > API Info (token)"
+                    className="bg-secondary border-border"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">ERS Developer API Key</Label>
+                  <Input
+                    data-testid="input-ers-devkey"
+                    type="password"
+                    value={form.ersDevKey}
+                    onChange={(e) => setForm({ ...form, ersDevKey: e.target.value })}
+                    placeholder="From Admin > API Keys"
                     className="bg-secondary border-border"
                   />
                 </div>

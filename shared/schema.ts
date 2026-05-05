@@ -23,8 +23,9 @@ export const clients = sqliteTable("clients", {
   name: text("name").notNull(),
   managerId: text("manager_id").notNull(),
   platform: text("platform").notNull(), // ERS | IO | ECOMM | LEADGEN
-  ersFolder: text("ers_folder"), // ERS folder name (e.g. "rockinbounce")
-  ersApiKey: text("ers_api_key"),
+  ersFolder: text("ers_folder"),   // ERS folder/subdomain (e.g. "rockinbounce")
+  ersApiKey: text("ers_api_key"),   // ERS API Token (from Admin > API Info)
+  ersDevKey: text("ers_dev_key"),   // ERS Developer API Key (from Admin > API Keys)
   ioAccountId: text("io_account_id"),
   ioApiKey: text("io_api_key"),
   aaaCampaignId: text("aaa_campaign_id"), // Agency Analytics campaign ID

@@ -149,19 +149,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!client || client.platform !== "ERS") {
       return res.status(400).json({ error: "Not an ERS client" });
     }
-    if (!client.ersFolder || !client.ersApiKey) {
-      return res.status(400).json({ error: "ERS folder/key not configured" });
+    if (!client.ersFolder || !client.ersApiKey || !client.ersDevKey) {
+      return res.status(400).json({ error: "ERS folder, API token, and developer key required" });
     }
     try {
       const { startDate, endDate } = req.body;
-      // ERS orders endpoint — filter by date
-      const url = `https://${client.ersFolder}.ourers.com/api6/orders?apiKey=${client.ersApiKey}&startDate=${startDate}&endDate=${endDate}`;
-      const response = await axios.get(url, { timeout: 15000 });
-      const orders = response.data;
-      const revenue = Array.isArray(orders)
-        ? orders.reduce((sum: number, o: any) => sum + (parseFloat(o.total) || 0), 0)
-        : 0;
-      res.json({ revenue, orderCount: Array.isArray(orders) ? orders.length : 0, raw: orders });
+      const m = await fetchERSMetrics(client.ersFolder, client.ersApiKey, client.ersDevKey, startDate, endDate);
+      res.json(m);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -296,8 +290,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const fetchedAt = new Date().toISOString();
 
           // ── ERS ────────────────────────────────────────────────────────
-          if (client.platform === "ERS" && client.ersFolder && client.ersApiKey) {
-            const m = await fetchERSMetrics(client.ersFolder, client.ersApiKey, startDate, endDate);
+          if (client.platform === "ERS" && client.ersFolder && client.ersApiKey && client.ersDevKey) {
+            const m = await fetchERSMetrics(client.ersFolder, client.ersApiKey, client.ersDevKey, startDate, endDate);
             storage.upsertRevenueSnapshot({ clientId: client.id, period: targetPeriod, periodType: "month", revenue: m.revenue, orderCount: m.orderCount, fetchedAt });
           }
 

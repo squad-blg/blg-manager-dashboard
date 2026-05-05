@@ -17,19 +17,21 @@ export interface ERSMetrics {
 
 /**
  * @param folder     ERS folder subdomain (e.g. "rockinbounce")
- * @param apiKey     ERS API key from Admin > API Info
+ * @param apiToken   ERS API Token from Admin > API Info
+ * @param devKey     ERS Developer API Key from Admin > API Keys
  * @param startDate  YYYY-MM-DD
  * @param endDate    YYYY-MM-DD
  */
 export async function fetchERSMetrics(
   folder: string,
-  apiKey: string,
+  apiToken: string,
+  devKey: string,
   startDate: string,
   endDate: string
 ): Promise<ERSMetrics> {
   const url = `https://${folder}.ourers.com/api6/orders`;
   const res = await axios.get(url, {
-    params: { apiKey, startDate, endDate },
+    params: { apiKey: devKey, apiToken, startDate, endDate },
     timeout: 20_000,
   });
 
