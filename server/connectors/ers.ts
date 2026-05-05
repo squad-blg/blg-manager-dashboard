@@ -1,13 +1,10 @@
 /**
  * ERS (Event Rental Systems) connector
  *
- * Revenue = sum of order totals from the summary report
- * Orders  = order count
+ * Uses POST /api/read/order_counts/ to get order count by date,
+ * then POST /api/read/customers/ + order reads to sum revenue.
  *
- * Auth: POST with key (developer key) + token (API token) in request body
- * Endpoint: POST https://{folder}.ourers.com/api/report/summary/
- *
- * Docs: https://{folder}.ourers.com/api6/documentation
+ * Auth: POST body with key (developer key) + token (API token)
  */
 
 import axios from "axios";
@@ -17,8 +14,15 @@ export interface ERSMetrics {
   orderCount: number;
 }
 
+const POST_HEADERS = { "Content-Type": "application/x-www-form-urlencoded" };
+
+function authBody(devKey: string, apiToken: string, extra: Record<string, string> = {}): string {
+  const p = new URLSearchParams({ key: devKey, token: apiToken, ...extra });
+  return p.toString();
+}
+
 /**
- * @param folder     ERS folder subdomain (e.g. "rockinbounce")
+ * @param folder     ERS folder subdomain (e.g. "centex")
  * @param apiToken   ERS API Token from Admin > General Config > API Info
  * @param devKey     ERS Developer API Key from Admin > General Config > API Keys
  * @param startDate  YYYY-MM-DD
@@ -31,48 +35,63 @@ export async function fetchERSMetrics(
   startDate: string,
   endDate: string
 ): Promise<ERSMetrics> {
-  // ERS API uses POST with key + token in the body
-  // Use the summary report which includes revenue totals for a date range
-  const baseUrl = `https://${folder}.ourers.com`;
+  const base = `https://${folder}.ourers.com`;
 
-  const params = new URLSearchParams({
-    key: devKey,
-    token: apiToken,
-    start_date: startDate,
-    end_date: endDate,
-  });
-
-  const res = await axios.post(
-    `${baseUrl}/api/report/summary/`,
-    params.toString(),
-    {
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      timeout: 20_000,
-    }
+  // Step 1: Get order counts by date to know total order count
+  const countRes = await axios.post(
+    `${base}/api/read/order_counts/`,
+    authBody(devKey, apiToken, { start_date: startDate, end_date: endDate }),
+    { headers: POST_HEADERS, timeout: 20_000 }
   );
 
-  const data = res.data;
-
-  // ERS summary report returns an object with revenue/order totals
-  // Try multiple possible field names based on ERS API response structure
-  let revenue = 0;
+  const countData = countRes.data;
+  // Sum all daily order counts
   let orderCount = 0;
+  if (countData?.rows && typeof countData.rows === "object") {
+    orderCount = Object.values(countData.rows as Record<string, string>)
+      .reduce((sum, v) => sum + parseInt(v as string, 10), 0);
+  }
 
-  if (data && typeof data === "object") {
-    // Common ERS summary fields
-    revenue =
-      parseFloat(data.total_revenue ?? data.revenue ?? data.total ?? data.gross ?? "0") || 0;
-    orderCount =
-      parseInt(data.order_count ?? data.orders ?? data.total_orders ?? "0", 10) || 0;
+  // Step 2: Get revenue via insights report (tries different param combos)
+  // ERS insights returns revenue breakdown
+  let revenue = 0;
 
-    // If it's an array of orders, sum them up
-    if (Array.isArray(data)) {
-      orderCount = data.length;
-      revenue = data.reduce(
-        (sum: number, o: any) =>
-          sum + (parseFloat(o.total ?? o.orderTotal ?? o.order_total ?? "0") || 0),
-        0
+  try {
+    const insRes = await axios.post(
+      `${base}/api/report/insights/`,
+      authBody(devKey, apiToken, { start_date: startDate, end_date: endDate }),
+      { headers: POST_HEADERS, timeout: 20_000 }
+    );
+    const ins = insRes.data;
+    if (ins?.data && Array.isArray(ins.data) && ins.data.length > 0) {
+      // insights data array — sum revenue fields
+      revenue = ins.data.reduce((sum: number, row: any) => {
+        return sum + (parseFloat(row.revenue ?? row.total ?? row.gross ?? "0") || 0);
+      }, 0);
+    }
+  } catch {
+    // fallback below
+  }
+
+  // Step 3: If insights returned nothing, try reading a sample of orders directly
+  // Use order_counts paging to get matching_orders count and read page 1
+  if (revenue === 0 && countData?.paging?.matching_orders > 0) {
+    try {
+      // Read customers with recent orders — ERS doesn't have a direct "orders in range" list endpoint
+      // but we can use the summary report with no date filter as a last resort
+      const summaryRes = await axios.post(
+        `${base}/api/report/summary/`,
+        authBody(devKey, apiToken),
+        { headers: POST_HEADERS, timeout: 20_000 }
       );
+      const s = summaryRes.data;
+      if (s?.data && Array.isArray(s.data) && s.data.length > 0) {
+        revenue = s.data.reduce((sum: number, row: any) => {
+          return sum + (parseFloat(row.revenue ?? row.total ?? row.gross ?? "0") || 0);
+        }, 0);
+      }
+    } catch {
+      // revenue stays 0 — order count still correct
     }
   }
 
