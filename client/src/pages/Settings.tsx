@@ -49,12 +49,6 @@ const SERVICE_INFO: Record<string, { name: string; description: string; docsUrl?
     description: "Your agency Manager Account (MCC) customer ID — digits only, no dashes (e.g. 1234567890).",
     placeholder: "1234567890",
   },
-  google_developer_token: {
-    name: "Google Ads Developer Token",
-    description: "Required by the Google Ads API. Found in your Google Ads manager account under Tools > API Center.",
-    docsUrl: "https://developers.google.com/google-ads/api/docs/get-started/dev-token",
-    placeholder: "Your developer token",
-  },
   meta_app: {
     name: "Meta App Credentials",
     description: "Facebook App ID and Secret for token refresh. Format: appId|appSecret (pipe-separated).",
@@ -133,7 +127,7 @@ export default function SettingsPage() {
     }
   }
 
-  const SERVICES = ["claude", "google_oauth", "google_mcc_id", "google_developer_token", "meta_app", "meta_token", "agency_analytics"];
+  const SERVICES = ["claude", "google_oauth", "google_mcc_id", "meta_app", "meta_token", "agency_analytics"];
 
   // Document state
   const fileInputRef = useRef<HTMLInputElement>(null);
