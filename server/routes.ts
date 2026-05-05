@@ -331,11 +331,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   console.error(`[sync] ${client.name} GA4:`, e.message, e.response?.data ? JSON.stringify(e.response.data).slice(0,300) : '');
                 }
               }
-              // Upsert analytics with ad spend + sessions
+              // Upsert analytics: store googleAdSpend separately, combine with existing metaAdSpend for total
               const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === targetPeriod);
+              const metaSpend = existing?.metaAdSpend ?? 0;
+              const totalSpend = Math.round((ads.adSpend + metaSpend) * 100) / 100;
               storage.upsertAnalyticsSnapshot({
                 clientId: client.id, period: targetPeriod, periodType: "month",
-                adSpend: ads.adSpend, sessions,
+                googleAdSpend: ads.adSpend,
+                metaAdSpend: metaSpend,
+                adSpend: totalSpend,
+                sessions,
                 conversions: ads.conversions,
                 leads: existing?.leads ?? 0,
                 costPerLead: existing?.costPerLead ?? 0,
@@ -355,14 +360,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             try {
               const m = await fetchMetaAdsMetrics(client.metaAdAccountId, metaCreds.key, startDate, endDate);
               const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === targetPeriod);
-              // Combine Meta spend with any existing Google Ads spend (don't overwrite)
-              const combinedSpend = Math.round(((existing?.adSpend ?? 0) + m.adSpend) * 100) / 100;
-              const combinedLeads = (existing?.leads ?? 0) + m.leads;
+              // Store Meta spend separately; combine with googleAdSpend for total — no compounding
+              const googleSpend = existing?.googleAdSpend ?? 0;
+              const totalSpend = Math.round((googleSpend + m.adSpend) * 100) / 100;
+              const leads = m.leads;
               storage.upsertAnalyticsSnapshot({
                 clientId: client.id, period: targetPeriod, periodType: "month",
-                adSpend: combinedSpend,
-                leads: combinedLeads,
-                costPerLead: combinedLeads > 0 ? Math.round((combinedSpend / combinedLeads) * 100) / 100 : 0,
+                googleAdSpend: googleSpend,
+                metaAdSpend: m.adSpend,
+                adSpend: totalSpend,
+                leads,
+                costPerLead: leads > 0 ? Math.round((totalSpend / leads) * 100) / 100 : 0,
                 sessions: existing?.sessions ?? 0,
                 conversions: existing?.conversions ?? 0,
                 conversionRate: existing?.conversionRate ?? 0,
@@ -370,7 +378,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 clicks: existing?.clicks ?? 0,
                 fetchedAt,
               });
-              console.log(`[sync] ${client.name} Meta: spend=$${m.adSpend} leads=${m.leads} (combined total spend=$${combinedSpend})`);
+              console.log(`[sync] ${client.name} Meta: spend=$${m.adSpend} leads=${leads} (google=$${googleSpend} meta=$${m.adSpend} total=$${totalSpend})`);
             } catch (e: any) {
               console.error(`[sync] ${client.name} Meta:`, e.message, e.response?.data ? JSON.stringify(e.response.data).slice(0,500) : '');
             }

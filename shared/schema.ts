@@ -71,7 +71,9 @@ export const analyticsSnapshots = sqliteTable("analytics_snapshots", {
   conversionRate: real("conversion_rate"),
   impressions: integer("impressions"),
   clicks: integer("clicks"),
-  adSpend: real("ad_spend"),
+  adSpend: real("ad_spend"),         // combined (googleAdSpend + metaAdSpend) — kept for compatibility
+  googleAdSpend: real("google_ad_spend"), // Google Ads spend (stored separately)
+  metaAdSpend: real("meta_ad_spend"),     // Meta Ads spend (stored separately)
   costPerLead: real("cost_per_lead"),
   leads: integer("leads"),
   fetchedAt: text("fetched_at").notNull(),

@@ -103,6 +103,8 @@ try { sqlite.exec(`ALTER TABLE clients ADD COLUMN google_ads_customer_id TEXT`);
 try { sqlite.exec(`ALTER TABLE clients ADD COLUMN ga4_property_id TEXT`); } catch {}
 try { sqlite.exec(`ALTER TABLE clients ADD COLUMN meta_ad_account_id TEXT`); } catch {}
 try { sqlite.exec(`ALTER TABLE clients ADD COLUMN ers_dev_key TEXT`); } catch {}
+try { sqlite.exec(`ALTER TABLE analytics_snapshots ADD COLUMN google_ad_spend REAL`); } catch {}
+try { sqlite.exec(`ALTER TABLE analytics_snapshots ADD COLUMN meta_ad_spend REAL`); } catch {}
 
 // Seed default data if empty
 const managerCount = sqlite.prepare("SELECT COUNT(*) as count FROM managers").get() as { count: number };
