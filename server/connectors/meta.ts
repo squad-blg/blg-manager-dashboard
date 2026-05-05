@@ -34,13 +34,16 @@ export async function fetchMetaAdsMetrics(
   startDate: string,
   endDate: string
 ): Promise<MetaAdsMetrics> {
+  // Ensure the account ID has the required act_ prefix
+  const accountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
+
   const fields = [
     "spend",
     "action_values",
     "actions",
   ].join(",");
 
-  const res = await axios.get(`${BASE}/${adAccountId}/insights`, {
+  const res = await axios.get(`${BASE}/${accountId}/insights`, {
     params: {
       access_token: accessToken,
       fields,
