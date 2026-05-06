@@ -470,6 +470,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         churnRisk = "medium";
       }
 
+      const adSpend = analyticsNow?.adSpend ?? 0;
+      const adSpendPrior = analyticsPrior?.adSpend ?? 0;
+      const adSpendChange = pct(adSpend, adSpendPrior);
+      // ROAS = Revenue / Ad Spend (null if no spend)
+      const mtdRoas = adSpend > 0 && (mtd?.revenue ?? 0) > 0
+        ? Math.round(((mtd?.revenue ?? 0) / adSpend) * 100) / 100
+        : null;
+      const ytdRoas = (() => {
+        // Sum ad spend across all months in current year for YTD ROAS
+        const now2 = new Date();
+        const ytdSpend = analytics
+          .filter(a => a.period.startsWith(String(now2.getFullYear())) && a.period <= currentPeriod)
+          .reduce((s, a) => s + (a.adSpend ?? 0), 0);
+        return ytdSpend > 0 && (ytd?.revenue ?? 0) > 0
+          ? Math.round(((ytd?.revenue ?? 0) / ytdSpend) * 100) / 100
+          : null;
+      })();
+
       return {
         client,
         revenue: {
@@ -488,11 +506,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           leads: analyticsNow?.leads ?? 0,
           leadsPrior: analyticsPrior?.leads ?? 0,
           leadsChange: pct(analyticsNow?.leads, analyticsPrior?.leads),
-          adSpend: analyticsNow?.adSpend ?? 0,
-          adSpendPrior: analyticsPrior?.adSpend ?? 0,
+          adSpend,
+          adSpendPrior,
+          adSpendChange,
           costPerLead: analyticsNow?.costPerLead ?? 0,
           conversionRate: analyticsNow?.conversionRate ?? 0,
-          history: analytics.slice(0, 13).reverse(),
+          mtdRoas,
+          ytdRoas,
+          history: analytics.slice(0, 13).map(a => {
+            const rev = monthlyRevenue.find(r => r.period === a.period)?.revenue ?? 0;
+            return {
+              ...a,
+              roas: (a.adSpend ?? 0) > 0 && rev > 0
+                ? Math.round((rev / (a.adSpend ?? 1)) * 100) / 100
+                : null,
+            };
+          }).reverse(),
         },
         health: {
           churnRisk,
@@ -510,7 +539,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const totalYtdPriorRevenue = summary.reduce((s, c) => s + c.revenue.ytdPrior, 0);
     const totalLeads = summary.reduce((s, c) => s + c.analytics.leads, 0);
     const totalAdSpend = summary.reduce((s, c) => s + c.analytics.adSpend, 0);
+    const totalAdSpendPrior = summary.reduce((s, c) => s + c.analytics.adSpendPrior, 0);
     const totalSessions = summary.reduce((s, c) => s + c.analytics.sessions, 0);
+    // Portfolio ROAS: total MTD revenue / total MTD ad spend
+    const portfolioMtdRoas = totalAdSpend > 0 && totalMtdRevenue > 0
+      ? Math.round((totalMtdRevenue / totalAdSpend) * 100) / 100
+      : null;
+    const portfolioYtdRoas = (() => {
+      const ytdSpend = summary.reduce((s, c) => s + (c.analytics.ytdRoas !== null ? 0 : 0), 0); // recalc below
+      // Use per-client ytdRoas weighted by spend
+      const totalYtdSpend = summary.reduce((s, c) => {
+        // We need ytd spend — approximate from analytics history
+        const now2 = new Date();
+        const cp = `${now2.getFullYear()}-${String(now2.getMonth() + 1).padStart(2, "0")}`;
+        const clientYtdSpend = c.analytics.history
+          .filter((a: any) => typeof a.period === 'string' && a.period.startsWith(String(now2.getFullYear())) && a.period <= cp)
+          .reduce((ss: number, a: any) => ss + (a.adSpend ?? 0), 0);
+        return s + clientYtdSpend;
+      }, 0);
+      return totalYtdSpend > 0 && totalYtdRevenue > 0
+        ? Math.round((totalYtdRevenue / totalYtdSpend) * 100) / 100
+        : null;
+    })();
 
     res.json({
       totals: {
@@ -526,7 +576,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             : null,
         totalLeads,
         totalAdSpend,
+        totalAdSpendPrior,
+        totalAdSpendChange:
+          totalAdSpendPrior > 0
+            ? Math.round(((totalAdSpend - totalAdSpendPrior) / totalAdSpendPrior) * 10000) / 100
+            : null,
         totalSessions,
+        portfolioMtdRoas,
+        portfolioYtdRoas,
         clientCount: clients.length,
       },
       clients: summary,

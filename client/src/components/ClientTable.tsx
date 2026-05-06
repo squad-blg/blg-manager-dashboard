@@ -199,7 +199,7 @@ const MANAGER_COLORS: Record<string, string> = {
   adriana: "hsl(37, 91%, 55%)",
 };
 
-type SortField = "name" | "mtd" | "mom" | "ytd" | "yoy" | "lastTouch" | "churn";
+type SortField = "name" | "mtd" | "mom" | "ytd" | "yoy" | "adSpend" | "roas" | "lastTouch" | "churn";
 type SortDir = "asc" | "desc";
 
 // Build the Agency Analytics URL for a client
@@ -238,6 +238,10 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
         va = a.revenue.ytd; vb = b.revenue.ytd; break;
       case "yoy":
         va = a.revenue.ytdChange ?? -999; vb = b.revenue.ytdChange ?? -999; break;
+      case "adSpend":
+        va = a.analytics.adSpend; vb = b.analytics.adSpend; break;
+      case "roas":
+        va = a.analytics.mtdRoas ?? -999; vb = b.analytics.mtdRoas ?? -999; break;
       case "lastTouch":
         va = a.health?.lastTouchDaysAgo ?? 9999; vb = b.health?.lastTouchDaysAgo ?? 9999; break;
       case "churn": {
@@ -296,6 +300,12 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
               </th>
               <th className={thClass} onClick={() => handleSort("yoy")} data-testid="sort-yoy">
                 YoY <SortIcon field="yoy" />
+              </th>
+              <th className={thClass} onClick={() => handleSort("adSpend")} data-testid="sort-adspend">
+                Ad Spend <SortIcon field="adSpend" />
+              </th>
+              <th className={thClass} onClick={() => handleSort("roas")} data-testid="sort-roas">
+                ROAS <SortIcon field="roas" />
               </th>
               <th className={thClass} onClick={() => handleSort("lastTouch")} data-testid="sort-touch">
                 Last Touch <SortIcon field="lastTouch" />
@@ -359,6 +369,14 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                   </td>
                   <td className="px-4 py-3">
                     <TrendBadge change={revenue.ytdChange} />
+                  </td>
+                  <td className="px-4 py-3 tabular-nums text-foreground">
+                    {analytics.adSpend > 0 ? formatCurrency(analytics.adSpend) : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums">
+                    {analytics.mtdRoas !== null
+                      ? <span className="font-semibold text-emerald-500">{analytics.mtdRoas.toFixed(1)}x</span>
+                      : <span className="text-muted-foreground text-xs">—</span>}
                   </td>
                   <td className="px-4 py-3">
                     <LastTouchCell clientId={client.id} health={health} />

@@ -47,7 +47,7 @@ function shortMonth(period: string) {
 export default function RevenueChart({ clients }: Props) {
   const [mode, setMode] = useState<ChartMode>("combined");
   const [chartType, setChartType] = useState<ChartType>("area");
-  const [view, setView] = useState<"revenue" | "leads" | "adspend">("revenue");
+  const [view, setView] = useState<"revenue" | "leads" | "adspend" | "roas">("revenue");
 
   // Build combined monthly dataset (last 12 months)
   const combinedData = useMemo(() => {
@@ -71,6 +71,9 @@ export default function RevenueChart({ clients }: Props) {
       row.revenue = Math.round(totalRevenue);
       row.leads = totalLeads;
       row.adSpend = Math.round(totalAdSpend);
+      row.roas = totalAdSpend > 0 && totalRevenue > 0
+        ? Math.round((totalRevenue / totalAdSpend) * 100) / 100
+        : null;
       return row;
     });
   }, [clients]);
@@ -98,15 +101,18 @@ export default function RevenueChart({ clients }: Props) {
     revenue: "Revenue",
     leads: "Leads",
     adspend: "Ad Spend",
+    roas: "ROAS",
   };
 
   const tooltipFormatter = (value: number, name: string) => {
     if (view === "revenue" || view === "adspend") return [formatCurrency(value), name];
+    if (view === "roas") return [`${value.toFixed(1)}x`, name];
     return [value.toLocaleString(), name];
   };
 
   const yTickFormatter = (v: number) => {
     if (view === "revenue" || view === "adspend") return formatCurrency(v);
+    if (view === "roas") return `${v.toFixed(1)}x`;
     return v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v);
   };
 
@@ -124,7 +130,7 @@ export default function RevenueChart({ clients }: Props) {
         <div className="flex items-center gap-2 flex-wrap">
           {/* View selector */}
           <div className="flex rounded-md overflow-hidden border border-border">
-            {(["revenue", "leads", "adspend"] as const).map((v) => (
+            {(["revenue", "leads", "adspend", "roas"] as const).map((v) => (
               <button
                 key={v}
                 data-testid={`chart-view-${v}`}
@@ -231,6 +237,7 @@ export default function RevenueChart({ clients }: Props) {
                 <Area
                   type="monotone"
                   dataKey={view === "adspend" ? "adSpend" : view}
+                  connectNulls
                   stroke="hsl(93, 48%, 55%)"
                   strokeWidth={2}
                   fill="url(#revGrad)"
