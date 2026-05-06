@@ -1,9 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Clock, AlertTriangle, CheckCircle } from "lucide-react";
+import {
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
+} from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { ClientSummary, Manager } from "@/pages/Dashboard";
+import { getAdMetrics } from "@/pages/Dashboard";
 
 interface Props {
   clients: ClientSummary[];
@@ -29,11 +39,14 @@ function formatLastTouch(daysAgo: number | null): { label: string; color: string
 
 function todayISO() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
 }
 
 function TrendBadge({ change }: { change: number | null | undefined }) {
-  if (change == null) return <span className="text-muted-foreground text-xs">—</span>;
+  if (change == null)
+    return <span className="text-muted-foreground text-xs">—</span>;
   if (change > 5)
     return (
       <span className="flex items-center gap-0.5 text-emerald-500 text-xs font-semibold tabular-nums">
@@ -43,12 +56,15 @@ function TrendBadge({ change }: { change: number | null | undefined }) {
   if (change < -5)
     return (
       <span className="flex items-center gap-0.5 text-red-500 text-xs font-semibold tabular-nums">
-        <TrendingDown className="w-3 h-3" />{change.toFixed(1)}%
+        <TrendingDown className="w-3 h-3" />
+        {change.toFixed(1)}%
       </span>
     );
   return (
     <span className="flex items-center gap-0.5 text-amber-500 text-xs font-semibold tabular-nums">
-      <Minus className="w-3 h-3" />{change > 0 ? "+" : ""}{change.toFixed(1)}%
+      <Minus className="w-3 h-3" />
+      {change > 0 ? "+" : ""}
+      {change.toFixed(1)}%
     </span>
   );
 }
@@ -74,7 +90,10 @@ function ChurnBadge({ risk }: { risk: "low" | "medium" | "high" }) {
 }
 
 // ─── Last Touch Cell ──────────────────────────────────────────────────────────
-function LastTouchCell({ clientId, health }: {
+function LastTouchCell({
+  clientId,
+  health,
+}: {
   clientId: string;
   health: ClientSummary["health"] | undefined;
 }) {
@@ -84,11 +103,11 @@ function LastTouchCell({ clientId, health }: {
   const popoverRef = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
 
-  const serverDate = health?.lastTouchDate ?? null;
-  const displayDate = localDate ?? serverDate;
-  const daysAgo = displayDate
-    ? Math.floor((Date.now() - new Date(displayDate).getTime()) / 86_400_000)
-    : null;
+  const displayDate = localDate ?? health?.lastTouchDate ?? null;
+  const daysAgo =
+    displayDate
+      ? Math.floor((Date.now() - new Date(displayDate).getTime()) / 86_400_000)
+      : null;
   const touch = formatLastTouch(daysAgo);
 
   const mutation = useMutation({
@@ -125,10 +144,9 @@ function LastTouchCell({ clientId, health }: {
 
   function handleDateChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (!e.target.value) return;
-    const date = e.target.value;
-    setLocalDate(date);
+    setLocalDate(e.target.value);
     setSaving(true);
-    mutation.mutate(date);
+    mutation.mutate(e.target.value);
   }
 
   return (
@@ -139,9 +157,13 @@ function LastTouchCell({ clientId, health }: {
         title="Click to log touch"
         disabled={saving}
       >
-        <Clock className={`w-3.5 h-3.5 ${touch.color} group-hover:text-primary transition-colors`} />
+        <Clock
+          className={`w-3.5 h-3.5 ${touch.color} group-hover:text-primary transition-colors`}
+        />
         <div className="text-left">
-          <span className={`text-xs font-medium ${touch.color} group-hover:text-primary transition-colors`}>
+          <span
+            className={`text-xs font-medium ${touch.color} group-hover:text-primary transition-colors`}
+          >
             {saving ? "Saving…" : touch.label}
           </span>
           {health?.lastTouchNote && (
@@ -154,7 +176,9 @@ function LastTouchCell({ clientId, health }: {
 
       {open && (
         <div className="absolute z-50 top-full left-0 mt-1.5 w-56 bg-card border border-border rounded-lg shadow-lg p-3 space-y-2">
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Log touch</p>
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+            Log touch
+          </p>
           <button
             onClick={handleLogToday}
             className="w-full text-left px-3 py-2 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold transition-colors"
@@ -191,8 +215,6 @@ type SortField =
   | "name"
   | "mtdSpend"
   | "mom"
-  | "ytdSpend"
-  | "yoy"
   | "roas"
   | "revenue"
   | "lastTouch"
@@ -200,7 +222,7 @@ type SortField =
 type SortDir = "asc" | "desc";
 
 export default function ClientTable({ clients, managers, selectedManager }: Props) {
-  const [sortField, setSortField] = useState<SortField>("yoy");
+  const [sortField, setSortField] = useState<SortField>("mom");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const getManager = (id: string) => managers.find((m) => m.id === id);
@@ -219,24 +241,34 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
     let vb: number | string = 0;
     switch (sortField) {
       case "name":
-        va = a.client.name; vb = b.client.name; break;
+        va = a.client.name;
+        vb = b.client.name;
+        break;
       case "mtdSpend":
-        va = a.ads?.mtdSpend ?? 0; vb = b.ads?.mtdSpend ?? 0; break;
+        va = getAdMetrics(a).adSpend ?? 0;
+        vb = getAdMetrics(b).adSpend ?? 0;
+        break;
       case "mom":
-        va = a.ads?.momChange ?? -999; vb = b.ads?.momChange ?? -999; break;
-      case "ytdSpend":
-        va = a.ads?.ytdSpend ?? 0; vb = b.ads?.ytdSpend ?? 0; break;
-      case "yoy":
-        va = a.ads?.yoyChange ?? -999; vb = b.ads?.yoyChange ?? -999; break;
+        va = getAdMetrics(a).adSpendChange ?? -999;
+        vb = getAdMetrics(b).adSpendChange ?? -999;
+        break;
       case "roas":
-        va = a.ads?.mtdRoas ?? -999; vb = b.ads?.mtdRoas ?? -999; break;
+        va = getAdMetrics(a).mtdRoas ?? -999;
+        vb = getAdMetrics(b).mtdRoas ?? -999;
+        break;
       case "revenue":
-        va = a.revenue.mtd; vb = b.revenue.mtd; break;
+        va = a.revenue?.mtd ?? 0;
+        vb = b.revenue?.mtd ?? 0;
+        break;
       case "lastTouch":
-        va = a.health?.lastTouchDaysAgo ?? 9999; vb = b.health?.lastTouchDaysAgo ?? 9999; break;
+        va = a.health?.lastTouchDaysAgo ?? 9999;
+        vb = b.health?.lastTouchDaysAgo ?? 9999;
+        break;
       case "churn": {
         const riskOrder = { high: 0, medium: 1, low: 2 };
-        va = riskOrder[a.health?.churnRisk ?? "low"]; vb = riskOrder[b.health?.churnRisk ?? "low"]; break;
+        va = riskOrder[a.health?.churnRisk ?? "low"];
+        vb = riskOrder[b.health?.churnRisk ?? "low"];
+        break;
       }
     }
     if (typeof va === "string") {
@@ -244,7 +276,9 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
         ? (va as string).localeCompare(vb as string)
         : (vb as string).localeCompare(va as string);
     }
-    return sortDir === "asc" ? (va as number) - (vb as number) : (vb as number) - (va as number);
+    return sortDir === "asc"
+      ? (va as number) - (vb as number)
+      : (vb as number) - (va as number);
   });
 
   function SortIcon({ field }: { field: SortField }) {
@@ -273,44 +307,77 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
         <table className="w-full text-sm" data-testid="client-table">
           <thead className="bg-muted/30">
             <tr>
-              <th className={thClass} onClick={() => handleSort("name")} data-testid="sort-name">
+              <th
+                className={thClass}
+                onClick={() => handleSort("name")}
+                data-testid="sort-name"
+              >
                 Client <SortIcon field="name" />
               </th>
-              {!selectedManager && (
-                <th className={thStatic}>Manager</th>
-              )}
-              {/* Ad spend columns — primary */}
-              <th className={thClass} onClick={() => handleSort("mtdSpend")} data-testid="sort-mtdspend">
-                MTD Spend <SortIcon field="mtdSpend" />
+              {!selectedManager && <th className={thStatic}>Manager</th>}
+              <th
+                className={thClass}
+                onClick={() => handleSort("mtdSpend")}
+                data-testid="sort-mtdspend"
+              >
+                MTD Ad Spend <SortIcon field="mtdSpend" />
               </th>
-              <th className={thClass} onClick={() => handleSort("mom")} data-testid="sort-mom">
+              <th
+                className={thClass}
+                onClick={() => handleSort("mom")}
+                data-testid="sort-mom"
+              >
                 MoM <SortIcon field="mom" />
               </th>
-              <th className={thClass} onClick={() => handleSort("ytdSpend")} data-testid="sort-ytdspend">
-                YTD Spend <SortIcon field="ytdSpend" />
-              </th>
-              <th className={thClass} onClick={() => handleSort("yoy")} data-testid="sort-yoy">
-                YoY <SortIcon field="yoy" />
-              </th>
-              {/* Revenue — context column */}
-              <th className={thClass} onClick={() => handleSort("revenue")} data-testid="sort-revenue">
+              <th className={thStatic}>YTD Ad Spend</th>
+              {/* Revenue — context only */}
+              <th
+                className={thClass}
+                onClick={() => handleSort("revenue")}
+                data-testid="sort-revenue"
+              >
                 Revenue MTD <SortIcon field="revenue" />
               </th>
-              <th className={thClass} onClick={() => handleSort("roas")} data-testid="sort-roas">
+              <th
+                className={thClass}
+                onClick={() => handleSort("roas")}
+                data-testid="sort-roas"
+              >
                 ROAS <SortIcon field="roas" />
               </th>
-              <th className={thClass} onClick={() => handleSort("lastTouch")} data-testid="sort-touch">
+              <th
+                className={thClass}
+                onClick={() => handleSort("lastTouch")}
+                data-testid="sort-touch"
+              >
                 Last Touch <SortIcon field="lastTouch" />
               </th>
-              <th className={thClass} onClick={() => handleSort("churn")} data-testid="sort-churn">
+              <th
+                className={thClass}
+                onClick={() => handleSort("churn")}
+                data-testid="sort-churn"
+              >
                 Churn Risk <SortIcon field="churn" />
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {sorted.map(({ client, ads, revenue, health }) => {
+            {sorted.map((row) => {
+              const { client, revenue, health } = row;
+              const analytics = getAdMetrics(row);
               const mgr = getManager(client.managerId);
-              const mgrColor = MANAGER_COLORS[client.managerId] ?? mgr?.color ?? "#6366f1";
+              const mgrColor =
+                MANAGER_COLORS[client.managerId] ?? mgr?.color ?? "#6366f1";
+
+              // YTD spend: sum history for current year
+              const currentYear = String(new Date().getFullYear());
+              const ytdSpend = (analytics.history ?? [])
+                .filter(
+                  (h) =>
+                    typeof h.period === "string" && h.period.startsWith(currentYear)
+                )
+                .reduce((s, h) => s + (h.adSpend ?? 0), 0);
+
               return (
                 <tr
                   key={client.id}
@@ -320,9 +387,13 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                   {/* Client name */}
                   <td className="px-4 py-3">
                     <div>
-                      <div className="font-medium text-foreground text-sm">{client.name}</div>
+                      <div className="font-medium text-foreground text-sm">
+                        {client.name}
+                      </div>
                       {client.location && (
-                        <div className="text-xs text-muted-foreground">{client.location}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {client.location}
+                        </div>
                       )}
                     </div>
                   </td>
@@ -331,9 +402,15 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                     <td className="px-4 py-3">
                       <span
                         className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium"
-                        style={{ background: mgrColor + "20", color: mgrColor }}
+                        style={{
+                          background: mgrColor + "20",
+                          color: mgrColor,
+                        }}
                       >
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: mgrColor }} />
+                        <span
+                          className="w-1.5 h-1.5 rounded-full"
+                          style={{ background: mgrColor }}
+                        />
                         {mgr.name}
                       </span>
                     </td>
@@ -341,33 +418,42 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
 
                   {/* MTD Ad Spend */}
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
-                    {(ads?.mtdSpend ?? 0) > 0 ? formatCurrency(ads.mtdSpend!) : <span className="text-muted-foreground text-sm">—</span>}
+                    {(analytics?.adSpend ?? 0) > 0 ? (
+                      formatCurrency(analytics.adSpend)
+                    ) : (
+                      <span className="text-muted-foreground text-sm">—</span>
+                    )}
                   </td>
 
-                  {/* MoM (spend vs last month) */}
+                  {/* MoM spend change */}
                   <td className="px-4 py-3">
-                    <TrendBadge change={ads?.momChange} />
+                    <TrendBadge change={analytics?.adSpendChange} />
                   </td>
 
-                  {/* YTD Ad Spend */}
+                  {/* YTD Ad Spend — computed from history */}
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
-                    {(ads?.ytdSpend ?? 0) > 0 ? formatCurrency(ads.ytdSpend!) : <span className="text-muted-foreground text-sm">—</span>}
+                    {ytdSpend > 0 ? (
+                      formatCurrency(ytdSpend)
+                    ) : (
+                      <span className="text-muted-foreground text-sm">—</span>
+                    )}
                   </td>
 
-                  {/* YoY (this month vs same month last year) */}
-                  <td className="px-4 py-3">
-                    <TrendBadge change={ads?.yoyChange} />
-                  </td>
-
-                  {/* Revenue MTD — context only, no trend */}
+                  {/* Revenue MTD — context only, muted */}
                   <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                    {revenue.mtd > 0 ? formatCurrency(revenue.mtd) : <span className="text-sm">—</span>}
+                    {(revenue?.mtd ?? 0) > 0 ? (
+                      formatCurrency(revenue.mtd)
+                    ) : (
+                      <span className="text-sm">—</span>
+                    )}
                   </td>
 
                   {/* ROAS */}
                   <td className="px-4 py-3 tabular-nums">
-                    {ads?.mtdRoas != null ? (
-                      <span className="font-semibold text-emerald-500">{ads?.mtdRoas?.toFixed(1)}x</span>
+                    {analytics?.mtdRoas != null ? (
+                      <span className="font-semibold text-emerald-500">
+                        {analytics.mtdRoas.toFixed(1)}x
+                      </span>
                     ) : (
                       <span className="text-muted-foreground text-xs">—</span>
                     )}

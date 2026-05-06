@@ -13,13 +13,13 @@ import {
 import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import type { ClientSummary } from "@/pages/Dashboard";
+import { getAdMetrics } from "@/pages/Dashboard";
 
 interface Props {
   clients: ClientSummary[];
 }
 
 const COLOR_PRIMARY = "hsl(93, 48%, 55%)";
-const COLOR_PRIOR = "hsl(93, 48%, 55%, 0.35)"; // faded for prior year line
 const CHART_COLORS = [
   "hsl(93, 48%, 55%)",
   "hsl(160, 55%, 42%)",
@@ -41,7 +41,13 @@ function formatCurrency(v: number) {
 function shortMonth(period: string) {
   const [y, m] = period.split("-");
   const d = new Date(parseInt(y), parseInt(m) - 1, 1);
-  return d.toLocaleString("en-US", { month: "short" });
+  return d.toLocaleString("en-US", { month: "short", year: "2-digit" });
+}
+
+// Build prior-year period string: "2026-05" → "2025-05"
+function priorYearPeriod(period: string) {
+  const [y, m] = period.split("-");
+  return `${parseInt(y) - 1}-${m}`;
 }
 
 export default function RevenueChart({ clients }: Props) {
@@ -49,52 +55,51 @@ export default function RevenueChart({ clients }: Props) {
   const [chartType, setChartType] = useState<ChartType>("area");
   const [showYoy, setShowYoy] = useState(true);
 
-  // ── Combined dataset: aggregate ad spend + prior-year overlay ──────────────
+  // ── Combined: aggregate adSpend per period + prior-year overlay ───────────
   const combinedData = useMemo(() => {
     if (!clients.length) return [];
 
-    // Collect all periods from ads.history
-    const periodSet = new Set<string>();
-    clients.forEach((c) => (c.ads?.history ?? []).forEach((h) => periodSet.add(h.period)));
-    const periods = Array.from(periodSet).sort().slice(-13);
+    // All periods across all clients' analytics history
+    const periodMap = new Map<string, { adSpend: number; hasData: boolean }>();
+
+    clients.forEach((c) => {
+      (getAdMetrics(c).history ?? []).forEach((h) => {
+        const existing = periodMap.get(h.period) ?? { adSpend: 0, hasData: false };
+        periodMap.set(h.period, {
+          adSpend: existing.adSpend + (h.adSpend ?? 0),
+          hasData: true,
+        });
+      });
+    });
+
+    const periods = Array.from(periodMap.keys()).sort().slice(-13);
 
     return periods.map((period) => {
-      let totalSpend = 0;
-      let totalPrior = 0;
-      let hasPrior = false;
-
-      clients.forEach((c) => {
-        const h = c.ads?.history?.find((x) => x.period === period);
-        if (h) {
-          totalSpend += h.adSpend ?? 0;
-          if (h.adSpendPriorYear != null) {
-            totalPrior += h.adSpendPriorYear;
-            hasPrior = true;
-          }
-        }
-      });
-
+      const current = periodMap.get(period)?.adSpend ?? 0;
+      const prior = periodMap.get(priorYearPeriod(period))?.adSpend ?? null;
       return {
         period,
         label: shortMonth(period),
-        adSpend: Math.round(totalSpend),
-        adSpendPriorYear: hasPrior ? Math.round(totalPrior) : null,
+        adSpend: Math.round(current),
+        adSpendPriorYear: prior != null ? Math.round(prior) : null,
       };
     });
   }, [clients]);
 
-  // ── Per-client breakdown ───────────────────────────────────────────────────
+  // ── Breakdown per client ──────────────────────────────────────────────────
   const breakdownData = useMemo(() => {
     if (!clients.length) return { data: [], keys: [] };
 
     const periodSet = new Set<string>();
-    clients.forEach((c) => (c.ads?.history ?? []).forEach((h) => periodSet.add(h.period)));
+    clients.forEach((c) =>
+(getAdMetrics(c).history ?? []).forEach((h) => periodSet.add(h.period))
+    );
     const periods = Array.from(periodSet).sort().slice(-13);
 
     const data = periods.map((period) => {
       const row: Record<string, any> = { period, label: shortMonth(period) };
       clients.forEach((c) => {
-        const h = c.ads?.history?.find((x) => x.period === period);
+        const h = (getAdMetrics(c).history ?? []).find((x) => x.period === period);
         row[c.client.name] = Math.round(h?.adSpend ?? 0);
       });
       return row;
@@ -110,10 +115,7 @@ export default function RevenueChart({ clients }: Props) {
     color: "hsl(140,15%,90%)",
     fontSize: "12px",
   };
-
   const axisTickStyle = { fill: "hsl(140,8%,52%)", fontSize: 11 };
-
-  const yFmt = (v: number) => formatCurrency(v);
   const tooltipFmt = (v: number, name: string) => [formatCurrency(v), name];
 
   return (
@@ -126,14 +128,13 @@ export default function RevenueChart({ clients }: Props) {
           <p className="text-xs text-muted-foreground mt-0.5">
             {mode === "combined"
               ? showYoy
-                ? "Current year vs same month prior year"
-                : "Aggregated across selected clients"
-              : "Per-client ad spend"}
+                ? "Current year vs same month prior year (dashed)"
+                : "Aggregated ad spend across selected clients"
+              : "Per-client ad spend breakdown"}
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* YoY toggle — only in combined mode */}
           {mode === "combined" && (
             <button
               data-testid="chart-yoy-toggle"
@@ -148,7 +149,6 @@ export default function RevenueChart({ clients }: Props) {
             </button>
           )}
 
-          {/* Mode toggle */}
           <div className="flex rounded-md overflow-hidden border border-border">
             <button
               data-testid="chart-mode-combined"
@@ -174,7 +174,6 @@ export default function RevenueChart({ clients }: Props) {
             </button>
           </div>
 
-          {/* Chart type */}
           <div className="flex rounded-md overflow-hidden border border-border">
             <button
               data-testid="chart-type-area"
@@ -206,7 +205,10 @@ export default function RevenueChart({ clients }: Props) {
         <ResponsiveContainer width="100%" height="100%">
           {mode === "combined" ? (
             chartType === "area" ? (
-              <AreaChart data={combinedData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+              <AreaChart
+                data={combinedData}
+                margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
+              >
                 <defs>
                   <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={COLOR_PRIMARY} stopOpacity={0.3} />
@@ -217,9 +219,24 @@ export default function RevenueChart({ clients }: Props) {
                     <stop offset="95%" stopColor={COLOR_PRIMARY} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(150,12%,17%)" vertical={false} />
-                <XAxis dataKey="label" tick={axisTickStyle} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={yFmt} tick={axisTickStyle} axisLine={false} tickLine={false} width={60} />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="hsl(150,12%,17%)"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="label"
+                  tick={axisTickStyle}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tickFormatter={formatCurrency}
+                  tick={axisTickStyle}
+                  axisLine={false}
+                  tickLine={false}
+                  width={60}
+                />
                 <Tooltip
                   formatter={tooltipFmt}
                   contentStyle={tooltipStyle}
@@ -227,10 +244,13 @@ export default function RevenueChart({ clients }: Props) {
                 />
                 {showYoy && (
                   <Legend
-                    wrapperStyle={{ fontSize: "11px", color: "hsl(140,8%,52%)", paddingTop: "8px" }}
+                    wrapperStyle={{
+                      fontSize: "11px",
+                      color: "hsl(140,8%,52%)",
+                      paddingTop: "8px",
+                    }}
                   />
                 )}
-                {/* Prior year — rendered first so current year is on top */}
                 {showYoy && (
                   <Area
                     type="monotone"
@@ -257,10 +277,28 @@ export default function RevenueChart({ clients }: Props) {
                 />
               </AreaChart>
             ) : (
-              <BarChart data={combinedData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(150,12%,17%)" vertical={false} />
-                <XAxis dataKey="label" tick={axisTickStyle} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={yFmt} tick={axisTickStyle} axisLine={false} tickLine={false} width={60} />
+              <BarChart
+                data={combinedData}
+                margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="hsl(150,12%,17%)"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="label"
+                  tick={axisTickStyle}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tickFormatter={formatCurrency}
+                  tick={axisTickStyle}
+                  axisLine={false}
+                  tickLine={false}
+                  width={60}
+                />
                 <Tooltip
                   formatter={tooltipFmt}
                   contentStyle={tooltipStyle}
@@ -268,7 +306,11 @@ export default function RevenueChart({ clients }: Props) {
                 />
                 {showYoy && (
                   <Legend
-                    wrapperStyle={{ fontSize: "11px", color: "hsl(140,8%,52%)", paddingTop: "8px" }}
+                    wrapperStyle={{
+                      fontSize: "11px",
+                      color: "hsl(140,8%,52%)",
+                      paddingTop: "8px",
+                    }}
                   />
                 )}
                 {showYoy && (
@@ -288,58 +330,89 @@ export default function RevenueChart({ clients }: Props) {
                 />
               </BarChart>
             )
+          ) : chartType === "area" ? (
+            <AreaChart
+              data={breakdownData.data}
+              margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
+            >
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="hsl(150,12%,17%)"
+                vertical={false}
+              />
+              <XAxis
+                dataKey="label"
+                tick={axisTickStyle}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tickFormatter={formatCurrency}
+                tick={axisTickStyle}
+                axisLine={false}
+                tickLine={false}
+                width={60}
+              />
+              <Tooltip
+                formatter={(v: number, n: string) => [formatCurrency(v), n]}
+                contentStyle={{ ...tooltipStyle, fontSize: "11px" }}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: "11px", color: "hsl(140,8%,52%)" }}
+              />
+              {breakdownData.keys.slice(0, 6).map((key, i) => (
+                <Area
+                  key={key}
+                  type="monotone"
+                  dataKey={key}
+                  stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                  strokeWidth={1.5}
+                  fill={CHART_COLORS[i % CHART_COLORS.length] + "22"}
+                  dot={false}
+                  stackId="a"
+                />
+              ))}
+            </AreaChart>
           ) : (
-            // ── Breakdown by client ──────────────────────────────────────────
-            chartType === "area" ? (
-              <AreaChart
-                data={breakdownData.data}
-                margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(150,12%,17%)" vertical={false} />
-                <XAxis dataKey="label" tick={axisTickStyle} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={yFmt} tick={axisTickStyle} axisLine={false} tickLine={false} width={60} />
-                <Tooltip
-                  formatter={(v: number, n: string) => [formatCurrency(v), n]}
-                  contentStyle={{ ...tooltipStyle, fontSize: "11px" }}
+            <BarChart
+              data={breakdownData.data}
+              margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
+            >
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="hsl(150,12%,17%)"
+                vertical={false}
+              />
+              <XAxis
+                dataKey="label"
+                tick={axisTickStyle}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tickFormatter={formatCurrency}
+                tick={axisTickStyle}
+                axisLine={false}
+                tickLine={false}
+                width={60}
+              />
+              <Tooltip
+                formatter={(v: number, n: string) => [formatCurrency(v), n]}
+                contentStyle={{ ...tooltipStyle, fontSize: "11px" }}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: "11px", color: "hsl(140,8%,52%)" }}
+              />
+              {breakdownData.keys.slice(0, 6).map((key, i) => (
+                <Bar
+                  key={key}
+                  dataKey={key}
+                  fill={CHART_COLORS[i % CHART_COLORS.length]}
+                  radius={[2, 2, 0, 0]}
+                  stackId="a"
                 />
-                <Legend wrapperStyle={{ fontSize: "11px", color: "hsl(140,8%,52%)" }} />
-                {breakdownData.keys.slice(0, 6).map((key, i) => (
-                  <Area
-                    key={key}
-                    type="monotone"
-                    dataKey={key}
-                    stroke={CHART_COLORS[i % CHART_COLORS.length]}
-                    strokeWidth={1.5}
-                    fill={CHART_COLORS[i % CHART_COLORS.length] + "22"}
-                    dot={false}
-                    stackId="a"
-                  />
-                ))}
-              </AreaChart>
-            ) : (
-              <BarChart
-                data={breakdownData.data}
-                margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(150,12%,17%)" vertical={false} />
-                <XAxis dataKey="label" tick={axisTickStyle} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={yFmt} tick={axisTickStyle} axisLine={false} tickLine={false} width={60} />
-                <Tooltip
-                  formatter={(v: number, n: string) => [formatCurrency(v), n]}
-                  contentStyle={{ ...tooltipStyle, fontSize: "11px" }}
-                />
-                <Legend wrapperStyle={{ fontSize: "11px", color: "hsl(140,8%,52%)" }} />
-                {breakdownData.keys.slice(0, 6).map((key, i) => (
-                  <Bar
-                    key={key}
-                    dataKey={key}
-                    fill={CHART_COLORS[i % CHART_COLORS.length]}
-                    radius={[2, 2, 0, 0]}
-                    stackId="a"
-                  />
-                ))}
-              </BarChart>
-            )
+              ))}
+            </BarChart>
           )}
         </ResponsiveContainer>
       </div>

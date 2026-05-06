@@ -17,25 +17,41 @@ export type Manager = {
   color: string;
 };
 
-export type DashboardData = {
-  totals: {
-    mtdSpend: number;
-    momChange: number | null;
-    yoyChange: number | null;
-    ytdSpend: number;
-    ytdChange: number | null;
-    totalLeads: number;
-    totalSessions: number;
-    mtdRevenue: number;
-    ytdRevenue: number;
-    portfolioMtdRoas: number | null;
-    portfolioYtdRoas: number | null;
-    clientCount: number;
-    growing: number;
-    flat: number;
-    declining: number;
-  };
-  clients: ClientSummary[];
+// ── Live API shape (df9cc65 server) ─────────────────────────────────────────
+export type AnalyticsSnapshot = {
+  id: number;
+  clientId: string;
+  period: string;        // "2026-05"
+  periodType: string;
+  sessions: number;
+  conversions: number;
+  conversionRate: number;
+  impressions: number;
+  clicks: number;
+  adSpend: number;
+  googleAdSpend: number;
+  metaAdSpend: number;
+  costPerLead: number;
+  leads: number;
+  fetchedAt: string;
+  roas: number | null;
+};
+
+export type AdMetrics = {
+  sessions?: number;
+  sessionsPrior?: number;
+  sessionsChange?: number | null;
+  leads?: number;
+  leadsPrior?: number;
+  leadsChange?: number | null;
+  adSpend: number;
+  adSpendPrior?: number;
+  adSpendChange?: number | null;
+  costPerLead?: number;
+  conversionRate?: number;
+  mtdRoas?: number | null;
+  ytdRoas?: number | null;
+  history: AnalyticsSnapshot[];
 };
 
 export type ClientSummary = {
@@ -49,34 +65,22 @@ export type ClientSummary = {
     lastTouchDate: string | null;
     lastTouchNote: string | null;
   };
-  ads: {
-    mtdSpend: number;
-    momSpend: number;
-    momChange: number | null;
-    yoySpend: number;
-    yoyChange: number | null;
-    ytdSpend: number;
-    ytdSpendPrior: number;
-    ytdChange: number | null;
-    mtdLeads: number;
-    momLeads: number;
-    leadsChange: number | null;
-    yoyLeads: number;
-    leadsYoyChange: number | null;
-    mtdSessions: number;
-    mtdRoas: number | null;
-    ytdRoas: number | null;
-    history: Array<{
-      period: string;
-      adSpend: number | null;
-      adSpendPriorYear: number | null;
-      leads: number | null;
-      sessions: number | null;
-    }>;
+  // Server may return either "analytics" (old) or "ads" (new) — we normalise in getAdMetrics()
+  analytics?: AdMetrics;
+  ads?: AdMetrics & {
+    mtdSpend?: number;
+    momChange?: number | null;
+    yoyChange?: number | null;
+    ytdSpend?: number;
   };
   revenue: {
     mtd: number;
+    mtdPrior?: number;
+    mtdChange?: number | null;
     ytd: number;
+    ytdPrior?: number;
+    ytdChange?: number | null;
+    history?: Array<{ period: string; revenue: number; orderCount: number }>;
   };
   health: {
     churnRisk: "low" | "medium" | "high";
@@ -84,6 +88,38 @@ export type ClientSummary = {
     lastTouchNote: string | null;
     lastTouchDaysAgo: number | null;
   };
+};
+
+/** Normalise whichever shape the server sends */
+export function getAdMetrics(c: ClientSummary): AdMetrics {
+  if (c.analytics) return c.analytics;
+  if (c.ads) {
+    // ads shape uses mtdSpend instead of adSpend
+    return {
+      ...c.ads,
+      adSpend: c.ads.adSpend ?? c.ads.mtdSpend ?? 0,
+      adSpendChange: c.ads.adSpendChange ?? c.ads.momChange ?? null,
+    };
+  }
+  return { adSpend: 0, history: [] };
+}
+
+export type DashboardData = {
+  totals: {
+    mtdRevenue: number;
+    mtdRevenueChange: number | null;
+    ytdRevenue: number;
+    ytdRevenueChange: number | null;
+    totalLeads: number;
+    totalAdSpend: number;
+    totalAdSpendPrior: number;
+    totalAdSpendChange: number | null;
+    totalSessions: number;
+    portfolioMtdRoas: number | null;
+    portfolioYtdRoas: number | null;
+    clientCount: number;
+  };
+  clients: ClientSummary[];
 };
 
 export default function Dashboard() {
@@ -105,6 +141,15 @@ export default function Dashboard() {
 
   const now = new Date();
   const monthLabel = now.toLocaleString("en-US", { month: "long", year: "numeric" });
+
+  // Derive portfolio health counts from ad spend change per client
+  const growing = dashboard?.clients.filter(
+    (c) => (getAdMetrics(c).adSpendChange ?? 0) > 5
+  ).length ?? 0;
+  const declining = dashboard?.clients.filter(
+    (c) => (getAdMetrics(c).adSpendChange ?? 0) < -5
+  ).length ?? 0;
+  const flat = (dashboard?.totals.clientCount ?? 0) - growing - declining;
 
   return (
     <div className="dashboard-grid">
@@ -151,7 +196,6 @@ export default function Dashboard() {
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Health Summary Cards */}
           {isLoading ? (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[...Array(8)].map((_, i) => (
@@ -159,15 +203,18 @@ export default function Dashboard() {
               ))}
             </div>
           ) : dashboard ? (
-            <HealthSummaryCards dashboard={dashboard} />
+            <HealthSummaryCards
+              dashboard={dashboard}
+              growing={growing}
+              flat={flat}
+              declining={declining}
+            />
           ) : null}
 
-          {/* Ad Spend Chart */}
           {dashboard && dashboard.clients.length > 0 && (
             <RevenueChart clients={dashboard.clients} />
           )}
 
-          {/* Client table */}
           {isLoading ? (
             <Skeleton className="h-64 rounded-lg" />
           ) : dashboard ? (
@@ -191,7 +238,7 @@ export default function Dashboard() {
   );
 }
 
-// ─── Health Summary Cards ──────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatCurrency(v: number) {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
@@ -199,13 +246,7 @@ function formatCurrency(v: number) {
   return `$${v.toFixed(0)}`;
 }
 
-function StatChange({
-  change,
-  label,
-}: {
-  change: number | null | undefined;
-  label: string;
-}) {
+function StatChange({ change, label }: { change: number | null | undefined; label: string }) {
   if (change == null)
     return <span className="text-xs text-muted-foreground">— {label}</span>;
   const up = change > 0;
@@ -243,77 +284,85 @@ function KpiCard({
   return (
     <Card
       className={`p-5 rounded-lg border ${
-        highlight
-          ? "bg-primary/5 border-primary/30"
-          : "bg-card border-border"
+        highlight ? "bg-primary/5 border-primary/30" : "bg-card border-border"
       }`}
     >
       <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">
         {label}
       </p>
-      <div className="text-2xl font-bold tabular-nums text-foreground leading-tight">
-        {value}
-      </div>
+      <div className="text-2xl font-bold tabular-nums text-foreground leading-tight">{value}</div>
       {sub && <div className="mt-2">{sub}</div>}
     </Card>
   );
 }
 
-function HealthSummaryCards({ dashboard }: { dashboard: DashboardData }) {
+function HealthSummaryCards({
+  dashboard,
+  growing,
+  flat,
+  declining,
+}: {
+  dashboard: DashboardData;
+  growing: number;
+  flat: number;
+  declining: number;
+}) {
   const {
-    mtdSpend,
-    momChange,
-    yoyChange,
-    ytdSpend,
-    ytdChange,
+    totalAdSpend,
+    totalAdSpendChange,
     totalLeads,
     totalSessions,
     mtdRevenue,
     ytdRevenue,
     portfolioMtdRoas,
     clientCount,
-    growing,
-    flat,
-    declining,
   } = dashboard.totals;
+
+  // YTD spend: sum analytics history for current year across all clients
+  const currentYear = String(new Date().getFullYear());
+  const ytdAdSpend = dashboard.clients.reduce((sum, c) => {
+    const ytd = (getAdMetrics(c).history ?? [])
+      .filter((h) => typeof h.period === "string" && h.period.startsWith(currentYear))
+      .reduce((s, h) => s + (h.adSpend ?? 0), 0);
+    return sum + ytd;
+  }, 0);
 
   return (
     <div className="space-y-3" data-testid="health-summary">
-      {/* Row 1: Ad Performance */}
+      {/* Row 1 — Ad Performance */}
       <div>
         <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2 px-1">
           Ad Performance
         </p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* MTD Spend + MoM */}
           <KpiCard
             label="MTD Ad Spend"
             highlight
             value={
-              mtdSpend > 0 ? (
-                formatCurrency(mtdSpend)
+              totalAdSpend > 0 ? (
+                formatCurrency(totalAdSpend)
               ) : (
                 <span className="text-muted-foreground">—</span>
               )
             }
-            sub={<StatChange change={momChange} label="MoM" />}
+            sub={<StatChange change={totalAdSpendChange} label="MoM" />}
           />
 
-          {/* YTD Spend + YoY */}
           <KpiCard
             label="YTD Ad Spend"
             highlight
             value={
-              ytdSpend > 0 ? (
-                formatCurrency(ytdSpend)
+              ytdAdSpend > 0 ? (
+                formatCurrency(ytdAdSpend)
               ) : (
                 <span className="text-muted-foreground">—</span>
               )
             }
-            sub={<StatChange change={ytdChange} label="YoY" />}
+            sub={
+              <span className="text-xs text-muted-foreground">Jan–now, current year</span>
+            }
           />
 
-          {/* Portfolio Health — growing/flat/declining based on YoY ad spend */}
           <KpiCard
             label="Portfolio Health"
             value={
@@ -342,7 +391,6 @@ function HealthSummaryCards({ dashboard }: { dashboard: DashboardData }) {
             }
           />
 
-          {/* MTD ROAS */}
           <KpiCard
             label="MTD ROAS"
             value={
@@ -363,13 +411,12 @@ function HealthSummaryCards({ dashboard }: { dashboard: DashboardData }) {
         </div>
       </div>
 
-      {/* Row 2: Supporting metrics + Revenue */}
+      {/* Row 2 — Supporting metrics + Revenue */}
       <div>
         <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2 px-1">
           Supporting Metrics
         </p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* MTD Leads */}
           <KpiCard
             label="MTD Leads"
             value={
@@ -379,12 +426,9 @@ function HealthSummaryCards({ dashboard }: { dashboard: DashboardData }) {
                 <span className="text-muted-foreground">—</span>
               )
             }
-            sub={
-              <span className="text-xs text-muted-foreground">from Meta campaigns</span>
-            }
+            sub={<span className="text-xs text-muted-foreground">from Meta campaigns</span>}
           />
 
-          {/* MTD Sessions */}
           <KpiCard
             label="MTD Sessions"
             value={
@@ -394,12 +438,9 @@ function HealthSummaryCards({ dashboard }: { dashboard: DashboardData }) {
                 <span className="text-muted-foreground">—</span>
               )
             }
-            sub={
-              <span className="text-xs text-muted-foreground">from Google Analytics</span>
-            }
+            sub={<span className="text-xs text-muted-foreground">from Google Analytics</span>}
           />
 
-          {/* Revenue MTD — context only */}
           <KpiCard
             label="Revenue MTD"
             value={
@@ -409,12 +450,9 @@ function HealthSummaryCards({ dashboard }: { dashboard: DashboardData }) {
                 <span className="text-muted-foreground">—</span>
               )
             }
-            sub={
-              <span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>
-            }
+            sub={<span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>}
           />
 
-          {/* Revenue YTD — context only */}
           <KpiCard
             label="Revenue YTD"
             value={
@@ -424,9 +462,7 @@ function HealthSummaryCards({ dashboard }: { dashboard: DashboardData }) {
                 <span className="text-muted-foreground">—</span>
               )
             }
-            sub={
-              <span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>
-            }
+            sub={<span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>}
           />
         </div>
       </div>
