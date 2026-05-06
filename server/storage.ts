@@ -106,6 +106,23 @@ try { sqlite.exec(`ALTER TABLE clients ADD COLUMN ers_dev_key TEXT`); } catch {}
 try { sqlite.exec(`ALTER TABLE analytics_snapshots ADD COLUMN google_ad_spend REAL`); } catch {}
 try { sqlite.exec(`ALTER TABLE analytics_snapshots ADD COLUMN meta_ad_spend REAL`); } catch {}
 
+// Purge demo data — remove any snapshot that was seeded with fake data.
+// Real syncs always set fetched_at to a real timestamp; demo data was seeded
+// with fetched_at values that pre-date the first real sync (May 2026).
+// Simplest approach: wipe ALL revenue and analytics snapshots once, keyed by
+// a one-time migration flag stored in api_credentials.
+try {
+  const purged = sqlite.prepare("SELECT key FROM api_credentials WHERE id = 'demo_data_purged'").get() as { key: string } | undefined;
+  if (!purged) {
+    sqlite.exec(`DELETE FROM revenue_snapshots`);
+    sqlite.exec(`DELETE FROM analytics_snapshots`);
+    sqlite.prepare("INSERT OR REPLACE INTO api_credentials (id, service, key, label, updated_at) VALUES ('demo_data_purged', 'system', '1', 'Demo data purged', datetime('now'))").run();
+    console.log('[startup] Demo data purged — all snapshot tables cleared.');
+  }
+} catch (e: any) {
+  console.error('[startup] Demo data purge error:', e.message);
+}
+
 // Seed default data if empty
 const managerCount = sqlite.prepare("SELECT COUNT(*) as count FROM managers").get() as { count: number };
 if (managerCount.count === 0) {

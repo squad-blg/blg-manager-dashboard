@@ -213,26 +213,26 @@ function HealthSummaryCards({ dashboard }: { dashboard: DashboardData }) {
 
   return (
     <div className="space-y-3" data-testid="health-summary">
-      {/* Row 1: Revenue */}
+      {/* Row 1: Revenue — standalone, no trends until ERS/IO live */}
       <div>
         <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2 px-1">Revenue</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {/* MTD Revenue */}
           <Card className="p-5 bg-card border border-border rounded-lg">
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">MTD Revenue</p>
-            <p className="text-2xl font-bold tabular-nums text-foreground">{formatCurrency(mtdRevenue)}</p>
-            <div className="flex items-center gap-1.5 mt-2">
-              <StatChange change={mtdRevenueChange} suffix="% MoM" />
-            </div>
+            <p className="text-2xl font-bold tabular-nums text-foreground">
+              {mtdRevenue > 0 ? formatCurrency(mtdRevenue) : <span className="text-muted-foreground">—</span>}
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">from ERS / IO / CRM</p>
           </Card>
 
           {/* YTD Revenue */}
           <Card className="p-5 bg-card border border-border rounded-lg">
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">YTD Revenue</p>
-            <p className="text-2xl font-bold tabular-nums text-foreground">{formatCurrency(ytdRevenue)}</p>
-            <div className="flex items-center gap-1.5 mt-2">
-              <StatChange change={ytdRevenueChange} suffix="% YoY" />
-            </div>
+            <p className="text-2xl font-bold tabular-nums text-foreground">
+              {ytdRevenue > 0 ? formatCurrency(ytdRevenue) : <span className="text-muted-foreground">—</span>}
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">from ERS / IO / CRM</p>
           </Card>
 
           {/* Portfolio Health */}
@@ -255,11 +255,11 @@ function HealthSummaryCards({ dashboard }: { dashboard: DashboardData }) {
             </div>
           </Card>
 
-          {/* MTD ROAS */}
+          {/* ROAS — meaningful once revenue flows */}
           <Card className="p-5 bg-card border border-border rounded-lg">
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">MTD ROAS</p>
             <p className="text-2xl font-bold tabular-nums text-foreground">
-              {portfolioMtdRoas !== null ? `${portfolioMtdRoas.toFixed(1)}x` : "—"}
+              {portfolioMtdRoas !== null ? `${portfolioMtdRoas.toFixed(1)}x` : <span className="text-muted-foreground">—</span>}
             </p>
             <p className="text-xs text-muted-foreground mt-2">
               {portfolioMtdRoas !== null
@@ -270,31 +270,36 @@ function HealthSummaryCards({ dashboard }: { dashboard: DashboardData }) {
         </div>
       </div>
 
-      {/* Row 2: Ad Performance */}
+      {/* Row 2: Ad Performance — MoM and YoY on spend */}
       <div>
         <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2 px-1">Ad Performance</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* MTD Ad Spend */}
+          {/* MTD Ad Spend + MoM */}
           <Card className="p-5 bg-card border border-border rounded-lg">
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">MTD Ad Spend</p>
-            <p className="text-2xl font-bold tabular-nums text-foreground">{formatCurrency(totalAdSpend)}</p>
+            <p className="text-2xl font-bold tabular-nums text-foreground">
+              {totalAdSpend > 0 ? formatCurrency(totalAdSpend) : <span className="text-muted-foreground">—</span>}
+            </p>
             <div className="flex items-center gap-1.5 mt-2">
-              {/* For spend, up is neutral/bad context — keep as-is directional */}
               <StatChange change={totalAdSpendChange} suffix="% MoM" />
             </div>
           </Card>
 
-          {/* Total Leads */}
+          {/* MTD Leads */}
           <Card className="p-5 bg-card border border-border rounded-lg">
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">MTD Leads</p>
-            <p className="text-2xl font-bold tabular-nums text-foreground">{dashboard.totals.totalLeads.toLocaleString()}</p>
+            <p className="text-2xl font-bold tabular-nums text-foreground">
+              {dashboard.totals.totalLeads > 0 ? dashboard.totals.totalLeads.toLocaleString() : <span className="text-muted-foreground">—</span>}
+            </p>
             <p className="text-xs text-muted-foreground mt-2">from Meta campaigns</p>
           </Card>
 
           {/* Sessions */}
           <Card className="p-5 bg-card border border-border rounded-lg">
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">MTD Sessions</p>
-            <p className="text-2xl font-bold tabular-nums text-foreground">{dashboard.totals.totalSessions.toLocaleString()}</p>
+            <p className="text-2xl font-bold tabular-nums text-foreground">
+              {dashboard.totals.totalSessions > 0 ? dashboard.totals.totalSessions.toLocaleString() : <span className="text-muted-foreground">—</span>}
+            </p>
             <p className="text-xs text-muted-foreground mt-2">from Google Analytics</p>
           </Card>
 
@@ -304,7 +309,7 @@ function HealthSummaryCards({ dashboard }: { dashboard: DashboardData }) {
             <p className="text-2xl font-bold tabular-nums text-foreground">
               {dashboard.totals.totalLeads > 0
                 ? formatCurrency(totalAdSpend / dashboard.totals.totalLeads)
-                : "—"}
+                : <span className="text-muted-foreground">—</span>}
             </p>
             <p className="text-xs text-muted-foreground mt-2">
               {dashboard.totals.totalLeads > 0 ? `${dashboard.totals.totalLeads} leads MTD` : "No leads recorded"}

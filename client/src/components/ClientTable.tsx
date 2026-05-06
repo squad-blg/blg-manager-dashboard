@@ -292,17 +292,14 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
               <th className={thClass} onClick={() => handleSort("mtd")} data-testid="sort-mtd">
                 MTD Rev <SortIcon field="mtd" />
               </th>
-              <th className={thClass} onClick={() => handleSort("mom")} data-testid="sort-mom">
-                MoM <SortIcon field="mom" />
-              </th>
               <th className={thClass} onClick={() => handleSort("ytd")} data-testid="sort-ytd">
                 YTD Rev <SortIcon field="ytd" />
               </th>
-              <th className={thClass} onClick={() => handleSort("yoy")} data-testid="sort-yoy">
-                YoY <SortIcon field="yoy" />
-              </th>
               <th className={thClass} onClick={() => handleSort("adSpend")} data-testid="sort-adspend">
                 Ad Spend <SortIcon field="adSpend" />
+              </th>
+              <th className={thClass} onClick={() => handleSort("mom")} data-testid="sort-mom">
+                MoM <SortIcon field="mom" />
               </th>
               <th className={thClass} onClick={() => handleSort("roas")} data-testid="sort-roas">
                 ROAS <SortIcon field="roas" />
@@ -359,19 +356,16 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                     </td>
                   )}
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
-                    {formatCurrency(revenue.mtd)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <TrendBadge change={revenue.mtdChange} />
+                    {revenue.mtd > 0 ? formatCurrency(revenue.mtd) : <span className="text-muted-foreground text-sm">—</span>}
                   </td>
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
-                    {formatCurrency(revenue.ytd)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <TrendBadge change={revenue.ytdChange} />
+                    {revenue.ytd > 0 ? formatCurrency(revenue.ytd) : <span className="text-muted-foreground text-sm">—</span>}
                   </td>
                   <td className="px-4 py-3 tabular-nums text-foreground">
-                    {analytics.adSpend > 0 ? formatCurrency(analytics.adSpend) : <span className="text-muted-foreground">—</span>}
+                    {analytics?.adSpend > 0 ? formatCurrency(analytics.adSpend) : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <TrendBadge change={analytics?.adSpendChange} />
                   </td>
                   <td className="px-4 py-3 tabular-nums">
                     {analytics?.mtdRoas != null
