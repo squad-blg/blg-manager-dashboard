@@ -55,7 +55,7 @@ export default function RevenueChart({ clients }: Props) {
 
     // Collect all periods from ads.history
     const periodSet = new Set<string>();
-    clients.forEach((c) => c.ads.history.forEach((h) => periodSet.add(h.period)));
+    clients.forEach((c) => (c.ads?.history ?? []).forEach((h) => periodSet.add(h.period)));
     const periods = Array.from(periodSet).sort().slice(-13);
 
     return periods.map((period) => {
@@ -64,7 +64,7 @@ export default function RevenueChart({ clients }: Props) {
       let hasPrior = false;
 
       clients.forEach((c) => {
-        const h = c.ads.history.find((x) => x.period === period);
+        const h = c.ads?.history?.find((x) => x.period === period);
         if (h) {
           totalSpend += h.adSpend ?? 0;
           if (h.adSpendPriorYear != null) {
@@ -88,13 +88,13 @@ export default function RevenueChart({ clients }: Props) {
     if (!clients.length) return { data: [], keys: [] };
 
     const periodSet = new Set<string>();
-    clients.forEach((c) => c.ads.history.forEach((h) => periodSet.add(h.period)));
+    clients.forEach((c) => (c.ads?.history ?? []).forEach((h) => periodSet.add(h.period)));
     const periods = Array.from(periodSet).sort().slice(-13);
 
     const data = periods.map((period) => {
       const row: Record<string, any> = { period, label: shortMonth(period) };
       clients.forEach((c) => {
-        const h = c.ads.history.find((x) => x.period === period);
+        const h = c.ads?.history?.find((x) => x.period === period);
         row[c.client.name] = Math.round(h?.adSpend ?? 0);
       });
       return row;

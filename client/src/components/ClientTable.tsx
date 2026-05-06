@@ -221,15 +221,15 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
       case "name":
         va = a.client.name; vb = b.client.name; break;
       case "mtdSpend":
-        va = a.ads.mtdSpend; vb = b.ads.mtdSpend; break;
+        va = a.ads?.mtdSpend ?? 0; vb = b.ads?.mtdSpend ?? 0; break;
       case "mom":
-        va = a.ads.momChange ?? -999; vb = b.ads.momChange ?? -999; break;
+        va = a.ads?.momChange ?? -999; vb = b.ads?.momChange ?? -999; break;
       case "ytdSpend":
-        va = a.ads.ytdSpend; vb = b.ads.ytdSpend; break;
+        va = a.ads?.ytdSpend ?? 0; vb = b.ads?.ytdSpend ?? 0; break;
       case "yoy":
-        va = a.ads.yoyChange ?? -999; vb = b.ads.yoyChange ?? -999; break;
+        va = a.ads?.yoyChange ?? -999; vb = b.ads?.yoyChange ?? -999; break;
       case "roas":
-        va = a.ads.mtdRoas ?? -999; vb = b.ads.mtdRoas ?? -999; break;
+        va = a.ads?.mtdRoas ?? -999; vb = b.ads?.mtdRoas ?? -999; break;
       case "revenue":
         va = a.revenue.mtd; vb = b.revenue.mtd; break;
       case "lastTouch":
@@ -341,22 +341,22 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
 
                   {/* MTD Ad Spend */}
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
-                    {ads.mtdSpend > 0 ? formatCurrency(ads.mtdSpend) : <span className="text-muted-foreground text-sm">—</span>}
+                    {(ads?.mtdSpend ?? 0) > 0 ? formatCurrency(ads.mtdSpend!) : <span className="text-muted-foreground text-sm">—</span>}
                   </td>
 
                   {/* MoM (spend vs last month) */}
                   <td className="px-4 py-3">
-                    <TrendBadge change={ads.momChange} />
+                    <TrendBadge change={ads?.momChange} />
                   </td>
 
                   {/* YTD Ad Spend */}
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
-                    {ads.ytdSpend > 0 ? formatCurrency(ads.ytdSpend) : <span className="text-muted-foreground text-sm">—</span>}
+                    {(ads?.ytdSpend ?? 0) > 0 ? formatCurrency(ads.ytdSpend!) : <span className="text-muted-foreground text-sm">—</span>}
                   </td>
 
                   {/* YoY (this month vs same month last year) */}
                   <td className="px-4 py-3">
-                    <TrendBadge change={ads.yoyChange} />
+                    <TrendBadge change={ads?.yoyChange} />
                   </td>
 
                   {/* Revenue MTD — context only, no trend */}
@@ -366,8 +366,8 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
 
                   {/* ROAS */}
                   <td className="px-4 py-3 tabular-nums">
-                    {ads.mtdRoas != null ? (
-                      <span className="font-semibold text-emerald-500">{ads.mtdRoas.toFixed(1)}x</span>
+                    {ads?.mtdRoas != null ? (
+                      <span className="font-semibold text-emerald-500">{ads?.mtdRoas?.toFixed(1)}x</span>
                     ) : (
                       <span className="text-muted-foreground text-xs">—</span>
                     )}
