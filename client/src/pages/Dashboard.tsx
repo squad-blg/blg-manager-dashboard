@@ -6,7 +6,7 @@ import RevenueChart from "@/components/RevenueChart";
 import ClientTable from "@/components/ClientTable";
 import AiChat from "@/components/AiChat";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RefreshCw, Sparkles, TrendingUp, AlertTriangle, Minus } from "lucide-react";
+import { RefreshCw, Sparkles, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -19,18 +19,21 @@ export type Manager = {
 
 export type DashboardData = {
   totals: {
-    mtdRevenue: number;
-    mtdRevenueChange: number | null;
-    ytdRevenue: number;
-    ytdRevenueChange: number | null;
+    mtdSpend: number;
+    momChange: number | null;
+    yoyChange: number | null;
+    ytdSpend: number;
+    ytdChange: number | null;
     totalLeads: number;
-    totalAdSpend: number;
-    totalAdSpendPrior: number;
-    totalAdSpendChange: number | null;
     totalSessions: number;
+    mtdRevenue: number;
+    ytdRevenue: number;
     portfolioMtdRoas: number | null;
     portfolioYtdRoas: number | null;
     clientCount: number;
+    growing: number;
+    flat: number;
+    declining: number;
   };
   clients: ClientSummary[];
 };
@@ -46,27 +49,34 @@ export type ClientSummary = {
     lastTouchDate: string | null;
     lastTouchNote: string | null;
   };
-  revenue: {
-    mtd: number;
-    mtdPrior: number;
-    mtdChange: number | null;
-    ytd: number;
-    ytdPrior: number;
+  ads: {
+    mtdSpend: number;
+    momSpend: number;
+    momChange: number | null;
+    yoySpend: number;
+    yoyChange: number | null;
+    ytdSpend: number;
+    ytdSpendPrior: number;
     ytdChange: number | null;
-    history: Array<{ period: string; revenue: number; orderCount: number | null }>;
-  };
-  analytics: {
-    sessions: number;
-    leads: number;
+    mtdLeads: number;
+    momLeads: number;
     leadsChange: number | null;
-    adSpend: number;
-    adSpendPrior: number;
-    adSpendChange: number | null;
-    costPerLead: number;
-    conversionRate: number;
+    yoyLeads: number;
+    leadsYoyChange: number | null;
+    mtdSessions: number;
     mtdRoas: number | null;
     ytdRoas: number | null;
-    history: Array<{ period: string; sessions: number | null; leads: number | null; adSpend: number | null; roas: number | null }>;
+    history: Array<{
+      period: string;
+      adSpend: number | null;
+      adSpendPriorYear: number | null;
+      leads: number | null;
+      sessions: number | null;
+    }>;
+  };
+  revenue: {
+    mtd: number;
+    ytd: number;
   };
   health: {
     churnRisk: "low" | "medium" | "high";
@@ -144,7 +154,7 @@ export default function Dashboard() {
           {/* Health Summary Cards */}
           {isLoading ? (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {[...Array(4)].map((_, i) => (
+              {[...Array(8)].map((_, i) => (
                 <Skeleton key={i} className="h-28 rounded-lg" />
               ))}
             </div>
@@ -152,7 +162,7 @@ export default function Dashboard() {
             <HealthSummaryCards dashboard={dashboard} />
           ) : null}
 
-          {/* Revenue Chart */}
+          {/* Ad Spend Chart */}
           {dashboard && dashboard.clients.length > 0 && (
             <RevenueChart clients={dashboard.clients} />
           )}
@@ -189,132 +199,235 @@ function formatCurrency(v: number) {
   return `$${v.toFixed(0)}`;
 }
 
+function StatChange({
+  change,
+  label,
+}: {
+  change: number | null | undefined;
+  label: string;
+}) {
+  if (change == null)
+    return <span className="text-xs text-muted-foreground">— {label}</span>;
+  const up = change > 0;
+  const down = change < 0;
+  return (
+    <span
+      className={`flex items-center gap-1 text-xs font-semibold tabular-nums ${
+        up ? "text-emerald-500" : down ? "text-red-500" : "text-muted-foreground"
+      }`}
+    >
+      {up ? (
+        <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+      ) : down ? (
+        <TrendingDown className="w-3.5 h-3.5 shrink-0" />
+      ) : (
+        <Minus className="w-3.5 h-3.5 shrink-0" />
+      )}
+      {change > 0 ? "+" : ""}
+      {change.toFixed(1)}% {label}
+    </span>
+  );
+}
+
+function KpiCard({
+  label,
+  value,
+  sub,
+  highlight = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  highlight?: boolean;
+}) {
+  return (
+    <Card
+      className={`p-5 rounded-lg border ${
+        highlight
+          ? "bg-primary/5 border-primary/30"
+          : "bg-card border-border"
+      }`}
+    >
+      <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">
+        {label}
+      </p>
+      <div className="text-2xl font-bold tabular-nums text-foreground leading-tight">
+        {value}
+      </div>
+      {sub && <div className="mt-2">{sub}</div>}
+    </Card>
+  );
+}
+
 function HealthSummaryCards({ dashboard }: { dashboard: DashboardData }) {
-  const growing = dashboard.clients.filter((c) => (c.revenue.ytdChange ?? 0) > 5).length;
-  const declining = dashboard.clients.filter((c) => (c.revenue.ytdChange ?? 0) < -5).length;
-  const flat = dashboard.clients.length - growing - declining;
-
-  const { mtdRevenue, mtdRevenueChange, ytdRevenue, ytdRevenueChange,
-          totalAdSpend, totalAdSpendChange, portfolioMtdRoas, clientCount } = dashboard.totals;
-
-  function StatChange({ change, suffix = "%", invertColor = false }: { change: number | null | undefined; suffix?: string; invertColor?: boolean }) {
-    if (change == null) return <span className="text-xs text-muted-foreground">—</span>;
-    const positive = invertColor ? change < 0 : change > 0;
-    const negative = invertColor ? change > 0 : change < 0;
-    return (
-      <span className={`flex items-center gap-1 text-xs font-semibold tabular-nums ${
-        positive ? "text-emerald-500" : negative ? "text-red-500" : "text-muted-foreground"
-      }`}>
-        {positive ? <TrendingUp className="w-3.5 h-3.5" /> : negative ? <AlertTriangle className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
-        {change > 0 ? "+" : ""}{change.toFixed(1)}{suffix}
-      </span>
-    );
-  }
+  const {
+    mtdSpend,
+    momChange,
+    yoyChange,
+    ytdSpend,
+    ytdChange,
+    totalLeads,
+    totalSessions,
+    mtdRevenue,
+    ytdRevenue,
+    portfolioMtdRoas,
+    clientCount,
+    growing,
+    flat,
+    declining,
+  } = dashboard.totals;
 
   return (
     <div className="space-y-3" data-testid="health-summary">
-      {/* Row 1: Revenue — standalone, no trends until ERS/IO live */}
+      {/* Row 1: Ad Performance */}
       <div>
-        <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2 px-1">Revenue</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2 px-1">
+          Ad Performance
+        </p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* MTD Revenue */}
-          <Card className="p-5 bg-card border border-border rounded-lg">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">MTD Revenue</p>
-            <p className="text-2xl font-bold tabular-nums text-foreground">
-              {mtdRevenue > 0 ? formatCurrency(mtdRevenue) : <span className="text-muted-foreground">—</span>}
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">from ERS / IO / CRM</p>
-          </Card>
+          {/* MTD Spend + MoM */}
+          <KpiCard
+            label="MTD Ad Spend"
+            highlight
+            value={
+              mtdSpend > 0 ? (
+                formatCurrency(mtdSpend)
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )
+            }
+            sub={<StatChange change={momChange} label="MoM" />}
+          />
 
-          {/* YTD Revenue */}
-          <Card className="p-5 bg-card border border-border rounded-lg">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">YTD Revenue</p>
-            <p className="text-2xl font-bold tabular-nums text-foreground">
-              {ytdRevenue > 0 ? formatCurrency(ytdRevenue) : <span className="text-muted-foreground">—</span>}
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">from ERS / IO / CRM</p>
-          </Card>
+          {/* YTD Spend + YoY */}
+          <KpiCard
+            label="YTD Ad Spend"
+            highlight
+            value={
+              ytdSpend > 0 ? (
+                formatCurrency(ytdSpend)
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )
+            }
+            sub={<StatChange change={ytdChange} label="YoY" />}
+          />
 
-          {/* Portfolio Health */}
-          <Card className="p-5 bg-card border border-border rounded-lg">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">Portfolio Health</p>
-            <div className="flex items-end gap-2">
-              <p className="text-2xl font-bold tabular-nums text-foreground">{clientCount}</p>
-              <p className="text-xs text-muted-foreground mb-1">clients</p>
-            </div>
-            <div className="flex items-center gap-3 mt-2">
-              <span className="flex items-center gap-1 text-xs font-semibold text-emerald-500">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />{growing} growing
+          {/* Portfolio Health — growing/flat/declining based on YoY ad spend */}
+          <KpiCard
+            label="Portfolio Health"
+            value={
+              <span>
+                {clientCount}{" "}
+                <span className="text-base font-medium text-muted-foreground">
+                  client{clientCount !== 1 ? "s" : ""}
+                </span>
               </span>
-              <span className="flex items-center gap-1 text-xs font-semibold text-amber-500">
-                <span className="w-2 h-2 rounded-full bg-amber-500" />{flat} flat
-              </span>
-              <span className="flex items-center gap-1 text-xs font-semibold text-red-500">
-                <span className="w-2 h-2 rounded-full bg-red-500" />{declining} down
-              </span>
-            </div>
-          </Card>
+            }
+            sub={
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="flex items-center gap-1 text-xs font-semibold text-emerald-500">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  {growing} growing
+                </span>
+                <span className="flex items-center gap-1 text-xs font-semibold text-amber-500">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                  {flat} flat
+                </span>
+                <span className="flex items-center gap-1 text-xs font-semibold text-red-500">
+                  <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                  {declining} down
+                </span>
+              </div>
+            }
+          />
 
-          {/* ROAS — meaningful once revenue flows */}
-          <Card className="p-5 bg-card border border-border rounded-lg">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">MTD ROAS</p>
-            <p className="text-2xl font-bold tabular-nums text-foreground">
-              {portfolioMtdRoas !== null ? `${portfolioMtdRoas.toFixed(1)}x` : <span className="text-muted-foreground">—</span>}
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              {portfolioMtdRoas !== null
-                ? `$${portfolioMtdRoas.toFixed(2)} rev per $1 spent`
-                : "Awaiting revenue data"}
-            </p>
-          </Card>
+          {/* MTD ROAS */}
+          <KpiCard
+            label="MTD ROAS"
+            value={
+              portfolioMtdRoas != null ? (
+                `${portfolioMtdRoas.toFixed(1)}x`
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )
+            }
+            sub={
+              <span className="text-xs text-muted-foreground">
+                {portfolioMtdRoas != null
+                  ? `$${portfolioMtdRoas.toFixed(2)} rev per $1 spent`
+                  : "Awaiting revenue data"}
+              </span>
+            }
+          />
         </div>
       </div>
 
-      {/* Row 2: Ad Performance — MoM and YoY on spend */}
+      {/* Row 2: Supporting metrics + Revenue */}
       <div>
-        <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2 px-1">Ad Performance</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2 px-1">
+          Supporting Metrics
+        </p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* MTD Ad Spend + MoM */}
-          <Card className="p-5 bg-card border border-border rounded-lg">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">MTD Ad Spend</p>
-            <p className="text-2xl font-bold tabular-nums text-foreground">
-              {totalAdSpend > 0 ? formatCurrency(totalAdSpend) : <span className="text-muted-foreground">—</span>}
-            </p>
-            <div className="flex items-center gap-1.5 mt-2">
-              <StatChange change={totalAdSpendChange} suffix="% MoM" />
-            </div>
-          </Card>
-
           {/* MTD Leads */}
-          <Card className="p-5 bg-card border border-border rounded-lg">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">MTD Leads</p>
-            <p className="text-2xl font-bold tabular-nums text-foreground">
-              {dashboard.totals.totalLeads > 0 ? dashboard.totals.totalLeads.toLocaleString() : <span className="text-muted-foreground">—</span>}
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">from Meta campaigns</p>
-          </Card>
+          <KpiCard
+            label="MTD Leads"
+            value={
+              totalLeads > 0 ? (
+                totalLeads.toLocaleString()
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )
+            }
+            sub={
+              <span className="text-xs text-muted-foreground">from Meta campaigns</span>
+            }
+          />
 
-          {/* Sessions */}
-          <Card className="p-5 bg-card border border-border rounded-lg">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">MTD Sessions</p>
-            <p className="text-2xl font-bold tabular-nums text-foreground">
-              {dashboard.totals.totalSessions > 0 ? dashboard.totals.totalSessions.toLocaleString() : <span className="text-muted-foreground">—</span>}
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">from Google Analytics</p>
-          </Card>
+          {/* MTD Sessions */}
+          <KpiCard
+            label="MTD Sessions"
+            value={
+              totalSessions > 0 ? (
+                totalSessions.toLocaleString()
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )
+            }
+            sub={
+              <span className="text-xs text-muted-foreground">from Google Analytics</span>
+            }
+          />
 
-          {/* Cost per Lead */}
-          <Card className="p-5 bg-card border border-border rounded-lg">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">Avg Cost / Lead</p>
-            <p className="text-2xl font-bold tabular-nums text-foreground">
-              {dashboard.totals.totalLeads > 0
-                ? formatCurrency(totalAdSpend / dashboard.totals.totalLeads)
-                : <span className="text-muted-foreground">—</span>}
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              {dashboard.totals.totalLeads > 0 ? `${dashboard.totals.totalLeads} leads MTD` : "No leads recorded"}
-            </p>
-          </Card>
+          {/* Revenue MTD — context only */}
+          <KpiCard
+            label="Revenue MTD"
+            value={
+              mtdRevenue > 0 ? (
+                formatCurrency(mtdRevenue)
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )
+            }
+            sub={
+              <span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>
+            }
+          />
+
+          {/* Revenue YTD — context only */}
+          <KpiCard
+            label="Revenue YTD"
+            value={
+              ytdRevenue > 0 ? (
+                formatCurrency(ytdRevenue)
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )
+            }
+            sub={
+              <span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>
+            }
+          />
         </div>
       </div>
     </div>

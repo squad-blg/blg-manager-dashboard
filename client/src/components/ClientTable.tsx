@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Clock, AlertTriangle, CheckCircle, ExternalLink } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Clock, AlertTriangle, CheckCircle } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { ClientSummary, Manager } from "@/pages/Dashboard";
@@ -80,12 +80,10 @@ function LastTouchCell({ clientId, health }: {
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  // Optimistic local date — shown immediately on save, confirmed by server refetch
   const [localDate, setLocalDate] = useState<string | null>(health?.lastTouchDate ?? null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
 
-  // Keep localDate in sync if parent data refreshes
   const serverDate = health?.lastTouchDate ?? null;
   const displayDate = localDate ?? serverDate;
   const daysAgo = displayDate
@@ -102,13 +100,11 @@ function LastTouchCell({ clientId, health }: {
       setOpen(false);
     },
     onError: () => {
-      // Keep optimistic value — it'll sync on next load
       setSaving(false);
       setOpen(false);
     },
   });
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     function handleClick(e: MouseEvent) {
@@ -137,7 +133,6 @@ function LastTouchCell({ clientId, health }: {
 
   return (
     <div className="relative" ref={popoverRef}>
-      {/* Trigger */}
       <button
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 group cursor-pointer rounded px-1 py-0.5 -mx-1 hover:bg-secondary/60 transition-colors"
@@ -157,27 +152,20 @@ function LastTouchCell({ clientId, health }: {
         </div>
       </button>
 
-      {/* Popover */}
       {open && (
         <div className="absolute z-50 top-full left-0 mt-1.5 w-56 bg-card border border-border rounded-lg shadow-lg p-3 space-y-2">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Log touch</p>
-
-          {/* Log today button */}
           <button
             onClick={handleLogToday}
             className="w-full text-left px-3 py-2 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold transition-colors"
           >
             ✓ Log today ({todayISO()})
           </button>
-
-          {/* Divider */}
           <div className="flex items-center gap-2">
             <div className="flex-1 h-px bg-border" />
             <span className="text-xs text-muted-foreground">or pick a date</span>
             <div className="flex-1 h-px bg-border" />
           </div>
-
-          {/* Date picker */}
           <input
             type="date"
             defaultValue={health?.lastTouchDate ?? todayISO()}
@@ -199,15 +187,17 @@ const MANAGER_COLORS: Record<string, string> = {
   adriana: "hsl(37, 91%, 55%)",
 };
 
-type SortField = "name" | "mtd" | "mom" | "ytd" | "yoy" | "adSpend" | "roas" | "lastTouch" | "churn";
+type SortField =
+  | "name"
+  | "mtdSpend"
+  | "mom"
+  | "ytdSpend"
+  | "yoy"
+  | "roas"
+  | "revenue"
+  | "lastTouch"
+  | "churn";
 type SortDir = "asc" | "desc";
-
-// Build the Agency Analytics URL for a client
-// AA client dashboard URL pattern: https://app.agencyanalytics.com/dashboard/{campaignId}
-function aaUrl(aaaCampaignId: string | null | undefined): string | null {
-  if (!aaaCampaignId) return null;
-  return `https://app.agencyanalytics.com/dashboard/${aaaCampaignId}`;
-}
 
 export default function ClientTable({ clients, managers, selectedManager }: Props) {
   const [sortField, setSortField] = useState<SortField>("yoy");
@@ -230,18 +220,18 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
     switch (sortField) {
       case "name":
         va = a.client.name; vb = b.client.name; break;
-      case "mtd":
-        va = a.revenue.mtd; vb = b.revenue.mtd; break;
+      case "mtdSpend":
+        va = a.ads.mtdSpend; vb = b.ads.mtdSpend; break;
       case "mom":
-        va = a.revenue.mtdChange ?? -999; vb = b.revenue.mtdChange ?? -999; break;
-      case "ytd":
-        va = a.revenue.ytd; vb = b.revenue.ytd; break;
+        va = a.ads.momChange ?? -999; vb = b.ads.momChange ?? -999; break;
+      case "ytdSpend":
+        va = a.ads.ytdSpend; vb = b.ads.ytdSpend; break;
       case "yoy":
-        va = a.revenue.ytdChange ?? -999; vb = b.revenue.ytdChange ?? -999; break;
-      case "adSpend":
-        va = a.analytics.adSpend; vb = b.analytics.adSpend; break;
+        va = a.ads.yoyChange ?? -999; vb = b.ads.yoyChange ?? -999; break;
       case "roas":
-        va = a.analytics.mtdRoas ?? -999; vb = b.analytics.mtdRoas ?? -999; break;
+        va = a.ads.mtdRoas ?? -999; vb = b.ads.mtdRoas ?? -999; break;
+      case "revenue":
+        va = a.revenue.mtd; vb = b.revenue.mtd; break;
       case "lastTouch":
         va = a.health?.lastTouchDaysAgo ?? 9999; vb = b.health?.lastTouchDaysAgo ?? 9999; break;
       case "churn": {
@@ -267,9 +257,9 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
   }
 
   const thClass =
-    "px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground transition-colors select-none";
+    "px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap";
   const thStatic =
-    "px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider";
+    "px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap";
 
   return (
     <Card className="bg-card border border-border rounded-lg overflow-hidden">
@@ -289,17 +279,22 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
               {!selectedManager && (
                 <th className={thStatic}>Manager</th>
               )}
-              <th className={thClass} onClick={() => handleSort("mtd")} data-testid="sort-mtd">
-                MTD Rev <SortIcon field="mtd" />
-              </th>
-              <th className={thClass} onClick={() => handleSort("ytd")} data-testid="sort-ytd">
-                YTD Rev <SortIcon field="ytd" />
-              </th>
-              <th className={thClass} onClick={() => handleSort("adSpend")} data-testid="sort-adspend">
-                Ad Spend <SortIcon field="adSpend" />
+              {/* Ad spend columns — primary */}
+              <th className={thClass} onClick={() => handleSort("mtdSpend")} data-testid="sort-mtdspend">
+                MTD Spend <SortIcon field="mtdSpend" />
               </th>
               <th className={thClass} onClick={() => handleSort("mom")} data-testid="sort-mom">
                 MoM <SortIcon field="mom" />
+              </th>
+              <th className={thClass} onClick={() => handleSort("ytdSpend")} data-testid="sort-ytdspend">
+                YTD Spend <SortIcon field="ytdSpend" />
+              </th>
+              <th className={thClass} onClick={() => handleSort("yoy")} data-testid="sort-yoy">
+                YoY <SortIcon field="yoy" />
+              </th>
+              {/* Revenue — context column */}
+              <th className={thClass} onClick={() => handleSort("revenue")} data-testid="sort-revenue">
+                Revenue MTD <SortIcon field="revenue" />
               </th>
               <th className={thClass} onClick={() => handleSort("roas")} data-testid="sort-roas">
                 ROAS <SortIcon field="roas" />
@@ -313,37 +308,25 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {sorted.map(({ client, revenue, analytics, health }) => {
+            {sorted.map(({ client, ads, revenue, health }) => {
               const mgr = getManager(client.managerId);
               const mgrColor = MANAGER_COLORS[client.managerId] ?? mgr?.color ?? "#6366f1";
-              const dashboardUrl = aaUrl((client as any).aaaCampaignId);
               return (
                 <tr
                   key={client.id}
                   className="hover:bg-secondary/30 transition-colors"
                   data-testid={`row-client-${client.id}`}
                 >
-                  {/* Client name — links to AA if campaign ID set */}
+                  {/* Client name */}
                   <td className="px-4 py-3">
                     <div>
-                      {dashboardUrl ? (
-                        <a
-                          href={dashboardUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 font-medium text-foreground text-sm hover:text-primary transition-colors group"
-                        >
-                          {client.name}
-                          <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
-                        </a>
-                      ) : (
-                        <div className="font-medium text-foreground text-sm">{client.name}</div>
-                      )}
+                      <div className="font-medium text-foreground text-sm">{client.name}</div>
                       {client.location && (
                         <div className="text-xs text-muted-foreground">{client.location}</div>
                       )}
                     </div>
                   </td>
+
                   {!selectedManager && mgr && (
                     <td className="px-4 py-3">
                       <span
@@ -355,26 +338,47 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                       </span>
                     </td>
                   )}
+
+                  {/* MTD Ad Spend */}
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
-                    {revenue.mtd > 0 ? formatCurrency(revenue.mtd) : <span className="text-muted-foreground text-sm">—</span>}
+                    {ads.mtdSpend > 0 ? formatCurrency(ads.mtdSpend) : <span className="text-muted-foreground text-sm">—</span>}
                   </td>
-                  <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
-                    {revenue.ytd > 0 ? formatCurrency(revenue.ytd) : <span className="text-muted-foreground text-sm">—</span>}
-                  </td>
-                  <td className="px-4 py-3 tabular-nums text-foreground">
-                    {analytics?.adSpend > 0 ? formatCurrency(analytics.adSpend) : <span className="text-muted-foreground">—</span>}
-                  </td>
+
+                  {/* MoM (spend vs last month) */}
                   <td className="px-4 py-3">
-                    <TrendBadge change={analytics?.adSpendChange} />
+                    <TrendBadge change={ads.momChange} />
                   </td>
+
+                  {/* YTD Ad Spend */}
+                  <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
+                    {ads.ytdSpend > 0 ? formatCurrency(ads.ytdSpend) : <span className="text-muted-foreground text-sm">—</span>}
+                  </td>
+
+                  {/* YoY (this month vs same month last year) */}
+                  <td className="px-4 py-3">
+                    <TrendBadge change={ads.yoyChange} />
+                  </td>
+
+                  {/* Revenue MTD — context only, no trend */}
+                  <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                    {revenue.mtd > 0 ? formatCurrency(revenue.mtd) : <span className="text-sm">—</span>}
+                  </td>
+
+                  {/* ROAS */}
                   <td className="px-4 py-3 tabular-nums">
-                    {analytics?.mtdRoas != null
-                      ? <span className="font-semibold text-emerald-500">{analytics.mtdRoas.toFixed(1)}x</span>
-                      : <span className="text-muted-foreground text-xs">—</span>}
+                    {ads.mtdRoas != null ? (
+                      <span className="font-semibold text-emerald-500">{ads.mtdRoas.toFixed(1)}x</span>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
                   </td>
+
+                  {/* Last Touch */}
                   <td className="px-4 py-3">
                     <LastTouchCell clientId={client.id} health={health} />
                   </td>
+
+                  {/* Churn Risk */}
                   <td className="px-4 py-3">
                     <ChurnBadge risk={health?.churnRisk ?? "low"} />
                   </td>
