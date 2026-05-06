@@ -32,8 +32,8 @@ function todayISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function TrendBadge({ change }: { change: number | null }) {
-  if (change === null) return <span className="text-muted-foreground text-xs">—</span>;
+function TrendBadge({ change }: { change: number | null | undefined }) {
+  if (change == null) return <span className="text-muted-foreground text-xs">—</span>;
   if (change > 5)
     return (
       <span className="flex items-center gap-0.5 text-emerald-500 text-xs font-semibold tabular-nums">
@@ -316,7 +316,7 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {sorted.map(({ client, revenue, health }) => {
+            {sorted.map(({ client, revenue, analytics, health }) => {
               const mgr = getManager(client.managerId);
               const mgrColor = MANAGER_COLORS[client.managerId] ?? mgr?.color ?? "#6366f1";
               const dashboardUrl = aaUrl((client as any).aaaCampaignId);
@@ -374,7 +374,7 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                     {analytics.adSpend > 0 ? formatCurrency(analytics.adSpend) : <span className="text-muted-foreground">—</span>}
                   </td>
                   <td className="px-4 py-3 tabular-nums">
-                    {analytics.mtdRoas !== null
+                    {analytics?.mtdRoas != null
                       ? <span className="font-semibold text-emerald-500">{analytics.mtdRoas.toFixed(1)}x</span>
                       : <span className="text-muted-foreground text-xs">—</span>}
                   </td>

@@ -197,8 +197,8 @@ function HealthSummaryCards({ dashboard }: { dashboard: DashboardData }) {
   const { mtdRevenue, mtdRevenueChange, ytdRevenue, ytdRevenueChange,
           totalAdSpend, totalAdSpendChange, portfolioMtdRoas, clientCount } = dashboard.totals;
 
-  function StatChange({ change, suffix = "%", invertColor = false }: { change: number | null; suffix?: string; invertColor?: boolean }) {
-    if (change === null) return <span className="text-xs text-muted-foreground">—</span>;
+  function StatChange({ change, suffix = "%", invertColor = false }: { change: number | null | undefined; suffix?: string; invertColor?: boolean }) {
+    if (change == null) return <span className="text-xs text-muted-foreground">—</span>;
     const positive = invertColor ? change < 0 : change > 0;
     const negative = invertColor ? change > 0 : change < 0;
     return (
