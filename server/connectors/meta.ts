@@ -50,6 +50,9 @@ export async function fetchMetaAdsMetrics(
       fields,
       time_range: JSON.stringify({ since: startDate, until: endDate }),
       level: "account",
+      // Use 7-day click attribution only — excludes view-through conversions
+      // which inflate purchase counts since a view is not a purchase
+      action_attribution_windows: JSON.stringify(["7d_click"]),
     },
     timeout: 20_000,
   });
