@@ -22,9 +22,7 @@ interface Props {
 }
 
 function formatCurrency(v: number) {
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
-  if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
-  return `$${v.toFixed(0)}`;
+  return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatLastTouch(daysAgo: number | null): { label: string; color: string } {
@@ -50,21 +48,21 @@ function TrendBadge({ change }: { change: number | null | undefined }) {
   if (change > 5)
     return (
       <span className="flex items-center gap-0.5 text-emerald-500 text-xs font-semibold tabular-nums">
-        <TrendingUp className="w-3 h-3" />+{change.toFixed(1)}%
+        <TrendingUp className="w-3 h-3" />+{change.toFixed(2)}%
       </span>
     );
   if (change < -5)
     return (
       <span className="flex items-center gap-0.5 text-red-500 text-xs font-semibold tabular-nums">
         <TrendingDown className="w-3 h-3" />
-        {change.toFixed(1)}%
+        {change.toFixed(2)}%
       </span>
     );
   return (
     <span className="flex items-center gap-0.5 text-amber-500 text-xs font-semibold tabular-nums">
       <Minus className="w-3 h-3" />
       {change > 0 ? "+" : ""}
-      {change.toFixed(1)}%
+      {change.toFixed(2)}%
     </span>
   );
 }
@@ -473,7 +471,7 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                   <td className="px-4 py-3 tabular-nums">
                     {analytics?.mtdRoas != null ? (
                       <span className="font-semibold text-emerald-500">
-                        {analytics.mtdRoas.toFixed(1)}x
+                        {analytics.mtdRoas.toFixed(2)}x
                       </span>
                     ) : (
                       <span className="text-muted-foreground text-xs">—</span>
