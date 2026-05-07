@@ -12,7 +12,7 @@ if (process.env.NODE_ENV === "production") {
 const sqlite = new Database(DB_PATH);
 export const db = drizzle(sqlite, { schema });
 
-// Auto-migrate tables
+// Auto-migrate tables — base schema kept in sync with shared/schema.ts
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS managers (
     id TEXT PRIMARY KEY,
@@ -28,11 +28,18 @@ sqlite.exec(`
     platform TEXT NOT NULL,
     ers_folder TEXT,
     ers_api_key TEXT,
+    ers_dev_key TEXT,
     io_account_id TEXT,
+    io_api_key TEXT,
     aaa_campaign_id TEXT,
     ecomm_platform TEXT,
+    google_ads_customer_id TEXT,
+    ga4_property_id TEXT,
+    meta_ad_account_id TEXT,
     location TEXT,
-    active INTEGER DEFAULT 1
+    active INTEGER DEFAULT 1,
+    last_touch_date TEXT,
+    last_touch_note TEXT
   );
 
   CREATE TABLE IF NOT EXISTS revenue_snapshots (
@@ -56,6 +63,8 @@ sqlite.exec(`
     impressions INTEGER,
     clicks INTEGER,
     ad_spend REAL,
+    google_ad_spend REAL,
+    meta_ad_spend REAL,
     cost_per_lead REAL,
     leads INTEGER,
     fetched_at TEXT NOT NULL
@@ -95,22 +104,24 @@ sqlite.exec(`
   );
 `);
 
-// Migrations — add columns if they don't exist yet
-try { sqlite.exec(`ALTER TABLE clients ADD COLUMN last_touch_date TEXT`); } catch {}
-try { sqlite.exec(`ALTER TABLE clients ADD COLUMN last_touch_note TEXT`); } catch {}
-try { sqlite.exec(`ALTER TABLE clients ADD COLUMN io_api_key TEXT`); } catch {}
-try { sqlite.exec(`ALTER TABLE clients ADD COLUMN google_ads_customer_id TEXT`); } catch {}
-try { sqlite.exec(`ALTER TABLE clients ADD COLUMN ga4_property_id TEXT`); } catch {}
-try { sqlite.exec(`ALTER TABLE clients ADD COLUMN meta_ad_account_id TEXT`); } catch {}
-try { sqlite.exec(`ALTER TABLE clients ADD COLUMN ers_dev_key TEXT`); } catch {}
-try { sqlite.exec(`ALTER TABLE analytics_snapshots ADD COLUMN google_ad_spend REAL`); } catch {}
-try { sqlite.exec(`ALTER TABLE analytics_snapshots ADD COLUMN meta_ad_spend REAL`); } catch {}
+// Additive migrations for existing deployments that have the old schema
+// These are safe to run repeatedly — they no-op if the column already exists
+const migrations = [
+  `ALTER TABLE clients ADD COLUMN last_touch_date TEXT`,
+  `ALTER TABLE clients ADD COLUMN last_touch_note TEXT`,
+  `ALTER TABLE clients ADD COLUMN io_api_key TEXT`,
+  `ALTER TABLE clients ADD COLUMN google_ads_customer_id TEXT`,
+  `ALTER TABLE clients ADD COLUMN ga4_property_id TEXT`,
+  `ALTER TABLE clients ADD COLUMN meta_ad_account_id TEXT`,
+  `ALTER TABLE clients ADD COLUMN ers_dev_key TEXT`,
+  `ALTER TABLE analytics_snapshots ADD COLUMN google_ad_spend REAL`,
+  `ALTER TABLE analytics_snapshots ADD COLUMN meta_ad_spend REAL`,
+];
+for (const sql of migrations) {
+  try { sqlite.exec(sql); } catch { /* column already exists */ }
+}
 
-// Purge demo data — remove any snapshot that was seeded with fake data.
-// Real syncs always set fetched_at to a real timestamp; demo data was seeded
-// with fetched_at values that pre-date the first real sync (May 2026).
-// Simplest approach: wipe ALL revenue and analytics snapshots once, keyed by
-// a one-time migration flag stored in api_credentials.
+// Purge demo data once — real syncs always use real timestamps
 try {
   const purged = sqlite.prepare("SELECT key FROM api_credentials WHERE id = 'demo_data_purged'").get() as { key: string } | undefined;
   if (!purged) {
@@ -123,7 +134,7 @@ try {
   console.error('[startup] Demo data purge error:', e.message);
 }
 
-// Seed default data if empty
+// Seed default managers if empty
 const managerCount = sqlite.prepare("SELECT COUNT(*) as count FROM managers").get() as { count: number };
 if (managerCount.count === 0) {
   sqlite.exec(`
@@ -134,38 +145,25 @@ if (managerCount.count === 0) {
 }
 
 export interface IStorage {
-  // Managers
   getManagers(): schema.Manager[];
   getManager(id: string): schema.Manager | undefined;
-
-  // Clients
   getClients(managerId?: string): schema.Client[];
   getClient(id: string): schema.Client | undefined;
   createClient(data: schema.InsertClient): schema.Client;
   updateClient(id: string, data: Partial<schema.InsertClient>): schema.Client | undefined;
   deleteClient(id: string): void;
-
-  // Revenue snapshots
   getRevenueSnapshots(clientId: string, periodType: string): schema.RevenueSnapshot[];
   upsertRevenueSnapshot(data: schema.InsertRevenueSnapshot): schema.RevenueSnapshot;
-
-  // Analytics snapshots
   getAnalyticsSnapshots(clientId: string, periodType: string): schema.AnalyticsSnapshot[];
   upsertAnalyticsSnapshot(data: schema.InsertAnalyticsSnapshot): schema.AnalyticsSnapshot;
-
-  // Documents
   getDocuments(): schema.Document[];
   getDocument(id: string): schema.Document | undefined;
   createDocument(data: schema.InsertDocument): schema.Document;
   updateDocument(id: string, data: Partial<schema.InsertDocument>): schema.Document | undefined;
   deleteDocument(id: string): void;
-
-  // Chat messages
   getChatMessages(sessionId: string, limit?: number): schema.ChatMessage[];
   addChatMessage(data: schema.InsertChatMessage): schema.ChatMessage;
   clearChatSession(sessionId: string): void;
-
-  // API Credentials
   getCredentials(): schema.ApiCredential[];
   upsertCredential(data: schema.InsertApiCredential): schema.ApiCredential;
 }
@@ -214,7 +212,6 @@ export class Storage implements IStorage {
   }
 
   upsertRevenueSnapshot(data: schema.InsertRevenueSnapshot): schema.RevenueSnapshot {
-    // Check if exists
     const existing = db.select().from(schema.revenueSnapshots)
       .where(and(
         eq(schema.revenueSnapshots.clientId, data.clientId),

@@ -2,6 +2,40 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import axios from "axios";
+
+/**
+ * Fires POST /api/sync for the current month every day at 3 AM server time.
+ * This keeps revenue and ad spend snapshots fresh without manual intervention.
+ */
+function scheduleDailySync() {
+  function msUntilNextRun() {
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(3, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return next.getTime() - now.getTime();
+  }
+
+  function runSync() {
+    const period = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    })();
+    console.log(`[cron] Daily sync triggered for period ${period}`);
+    axios
+      .post(`http://localhost:${process.env.PORT || 5000}/api/sync`, { period })
+      .then(() => console.log(`[cron] Sync started for ${period}`))
+      .catch((e: any) => console.error(`[cron] Sync failed:`, e.message));
+    // Schedule next run in 24 hours
+    setTimeout(runSync, 24 * 60 * 60 * 1000);
+  }
+
+  const delay = msUntilNextRun();
+  console.log(`[cron] Daily sync scheduled — first run in ${Math.round(delay / 60000)} minutes (3 AM)`);
+  setTimeout(runSync, delay);
+}
+
 
 const app = express();
 const httpServer = createServer(app);
@@ -98,6 +132,7 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      scheduleDailySync();
     },
   );
 })();

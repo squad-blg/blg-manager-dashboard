@@ -258,6 +258,32 @@ export default function SettingsPage() {
                             ? new Date(existing.updatedAt).toLocaleDateString()
                             : "—"}
                         </p>
+                        {/* Meta token expiry warning — tokens last ~60 days */}
+                        {service === "meta_token" && existing?.updatedAt && (() => {
+                          const daysSince = Math.floor(
+                            (Date.now() - new Date(existing.updatedAt).getTime()) / 86_400_000
+                          );
+                          const daysLeft = 60 - daysSince;
+                          if (daysLeft <= 0) {
+                            return (
+                              <p className="text-xs font-semibold text-red-500 mt-1">
+                                ⚠️ Token likely expired ({daysSince} days old) — refresh now or Meta data will show $0
+                              </p>
+                            );
+                          }
+                          if (daysLeft <= 14) {
+                            return (
+                              <p className="text-xs font-semibold text-amber-500 mt-1">
+                                ⚠️ Token expires in ~{daysLeft} days — refresh soon
+                              </p>
+                            );
+                          }
+                          return (
+                            <p className="text-xs text-emerald-500 mt-1">
+                              ✓ Token valid (~{daysLeft} days remaining)
+                            </p>
+                          );
+                        })()}
                       </div>
                     )}
 

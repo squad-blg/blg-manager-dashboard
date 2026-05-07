@@ -50,15 +50,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const client = storage.createClient(req.body);
       res.json(client);
 
-      // Auto-backfill last 13 months in the background so YoY/YTD are
+      // Auto-backfill current month + last 13 months so YoY/YTD are
       // populated immediately for any new client.
       setImmediate(async () => {
-        console.log(`[backfill] Starting 13-month backfill for new client: ${client.name}`);
+        console.log(`[backfill] Starting 14-month backfill for new client: ${client.name}`);
+
+        // Warn early if ERS client is missing credentials — saves confusion later
+        if (client.platform === "ERS") {
+          const missing = ["ersFolder", "ersApiKey", "ersDevKey"].filter(k => !client[k as keyof typeof client]);
+          if (missing.length > 0) {
+            console.warn(`[backfill] ${client.name} is ERS but missing: ${missing.join(", ")} — revenue will not be fetched`);
+          }
+        }
+
         const now = new Date();
         const periods: string[] = [];
         let y = now.getFullYear();
-        let m = now.getMonth() + 1; // current month — will be synced first by the normal sync cron
-        // Go back 13 months (skip current month — already synced on creation)
+        let m = now.getMonth() + 1;
+        // Include current month first, then go back 13 months
+        periods.push(`${y}-${String(m).padStart(2, "0")}`);
         for (let i = 0; i < 13; i++) {
           m -= 1;
           if (m === 0) { m = 12; y -= 1; }
@@ -331,13 +341,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const fetchedAt = new Date().toISOString();
 
           // ── ERS ────────────────────────────────────────────────────────
-          if (client.platform === "ERS" && client.ersFolder && client.ersApiKey && client.ersDevKey) {
-            try {
-              const m = await fetchERSMetrics(client.ersFolder, client.ersApiKey, client.ersDevKey, startDate, endDate);
-              storage.upsertRevenueSnapshot({ clientId: client.id, period: targetPeriod, periodType: "month", revenue: m.revenue, orderCount: m.orderCount, fetchedAt });
-              console.log(`[sync] ${client.name} ERS: orders=${m.orderCount} revenue=$${m.revenue}`);
-            } catch (e: any) {
-              console.error(`[sync] ${client.name} ERS:`, e.message);
+          if (client.platform === "ERS") {
+            if (!client.ersFolder || !client.ersApiKey || !client.ersDevKey) {
+              console.warn(`[sync] ${client.name} is ERS but missing credentials (ersFolder=${!!client.ersFolder} ersApiKey=${!!client.ersApiKey} ersDevKey=${!!client.ersDevKey}) — skipping revenue fetch`);
+            } else {
+              try {
+                const m = await fetchERSMetrics(client.ersFolder, client.ersApiKey, client.ersDevKey, startDate, endDate);
+                storage.upsertRevenueSnapshot({ clientId: client.id, period: targetPeriod, periodType: "month", revenue: m.revenue, orderCount: m.orderCount, fetchedAt });
+                console.log(`[sync] ${client.name} ERS: orders=${m.orderCount} revenue=$${m.revenue}`);
+              } catch (e: any) {
+                console.error(`[sync] ${client.name} ERS:`, e.message);
+              }
             }
           }
 
@@ -432,7 +446,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
-  // ─── Analytics ──────────────────────────────────────────────────────────
+  // ─── Sync status ─────────────────────────────────────────────────────────
+  // GET /api/sync/status — returns when the last sync ran per client
+  app.get("/api/sync/status", (_req, res) => {
+    const clients = storage.getClients();
+    const now = new Date();
+    const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    const status = clients.map((client) => {
+      const revSnaps = storage.getRevenueSnapshots(client.id, "month");
+      const latest = revSnaps.find(s => s.period === currentPeriod);
+      const anySnap = revSnaps[0]; // most recent overall
+
+      const missingErsKeys = client.platform === "ERS"
+        ? ["ersFolder", "ersApiKey", "ersDevKey"].filter(k => !client[k as keyof typeof client])
+        : [];
+
+      return {
+        clientId: client.id,
+        name: client.name,
+        platform: client.platform,
+        currentPeriodRevenue: latest?.revenue ?? null,
+        currentPeriodOrders: latest?.orderCount ?? null,
+        lastSyncedAt: latest?.fetchedAt ?? anySnap?.fetchedAt ?? null,
+        hasCurrentMonth: !!latest,
+        missingCredentials: missingErsKeys,
+      };
+    });
+
+    res.json({ currentPeriod, clients: status });
+  });
+
+
   app.get("/api/analytics/:clientId", (req, res) => {
     const { periodType = "month" } = req.query;
     const snapshots = storage.getAnalyticsSnapshots(req.params.clientId, periodType as string);

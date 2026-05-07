@@ -103,6 +103,8 @@ export function getAdMetrics(c: ClientSummary): AdMetrics {
   const base: AdMetrics = {
     ...raw,
     adSpend: (raw as any).adSpend ?? (raw as any).mtdSpend ?? 0,
+    // momSpend from server maps to adSpendPrior used in client-side aggregation
+    adSpendPrior: (raw as any).adSpendPrior ?? (raw as any).momSpend ?? 0,
     adSpendChange: (raw as any).adSpendChange ?? (raw as any).momChange ?? null,
   };
 
