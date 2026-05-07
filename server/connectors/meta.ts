@@ -52,7 +52,11 @@ export async function fetchMetaAdsMetrics(
       level: "account",
       // Use 7-day click attribution only — excludes view-through conversions
       // which inflate purchase counts since a view is not a purchase
+      // Force click-only attribution and disable statistical modeling
+      // Meta's default includes 1-day view + modeled conversions which inflates counts
       action_attribution_windows: JSON.stringify(["7d_click"]),
+      use_unified_attribution_setting: "false",
+      action_report_time: "conversion",
     },
     timeout: 20_000,
   });
