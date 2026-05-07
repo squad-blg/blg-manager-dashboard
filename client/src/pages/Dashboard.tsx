@@ -44,9 +44,14 @@ export type AdMetrics = {
   leads?: number;
   leadsPrior?: number;
   leadsChange?: number | null;
-  adSpend: number;
-  adSpendPrior?: number;
-  adSpendChange?: number | null;
+  adSpend: number;          // MTD spend (this month)
+  adSpendPrior?: number;    // Prior month spend (for MoM)
+  adSpendChange?: number | null;   // MoM % change
+  yoySpend?: number;        // Same month last year spend
+  yoyChange?: number | null;       // YoY % change (MTD vs same month LY)
+  ytdSpend?: number;        // Jan–currentMonth this year
+  ytdSpendPrior?: number;   // Jan–currentMonth last year
+  ytdChange?: number | null;       // YTD YoY % change
   costPerLead?: number;
   conversionRate?: number;
   mtdRoas?: number | null;
@@ -90,18 +95,50 @@ export type ClientSummary = {
   };
 };
 
-/** Normalise whichever shape the server sends */
+/** Normalise whichever shape the server sends, computing YoY/YTD from history */
 export function getAdMetrics(c: ClientSummary): AdMetrics {
-  if (c.analytics) return c.analytics;
-  if (c.ads) {
-    // ads shape uses mtdSpend instead of adSpend
-    return {
-      ...c.ads,
-      adSpend: c.ads.adSpend ?? c.ads.mtdSpend ?? 0,
-      adSpendChange: c.ads.adSpendChange ?? c.ads.momChange ?? null,
-    };
-  }
-  return { adSpend: 0, history: [] };
+  const raw = c.analytics ?? c.ads ?? null;
+  if (!raw) return { adSpend: 0, history: [] };
+
+  const base: AdMetrics = {
+    ...raw,
+    adSpend: (raw as any).adSpend ?? (raw as any).mtdSpend ?? 0,
+    adSpendChange: (raw as any).adSpendChange ?? (raw as any).momChange ?? null,
+  };
+
+  // Always compute YoY / YTD from history so they work regardless of server version
+  const history = base.history ?? [];
+  const now = new Date();
+  const curY = now.getFullYear();
+  const curM = String(now.getMonth() + 1).padStart(2, "0");
+  const currentPeriod = `${curY}-${curM}`;
+  const yoyPeriod    = `${curY - 1}-${curM}`;
+  const ytdPrefix    = String(curY);
+  const ytdPriorPfx  = String(curY - 1);
+
+  const byPeriod = Object.fromEntries(history.map((h) => [h.period, h.adSpend ?? 0]));
+
+  const mtdSpend  = byPeriod[currentPeriod] ?? base.adSpend;
+  const yoySpend  = byPeriod[yoyPeriod] ?? 0;
+  const ytdSpend  = Object.entries(byPeriod)
+    .filter(([p]) => p.startsWith(ytdPrefix) && p <= currentPeriod)
+    .reduce((s, [, v]) => s + v, 0);
+  const ytdSpendPrior = Object.entries(byPeriod)
+    .filter(([p]) => p.startsWith(ytdPriorPfx) && p <= yoyPeriod)
+    .reduce((s, [, v]) => s + v, 0);
+
+  const pct = (a: number, b: number) =>
+    b > 0 ? Math.round(((a - b) / b) * 10000) / 100 : null;
+
+  return {
+    ...base,
+    adSpend: mtdSpend,
+    yoySpend,
+    yoyChange: yoySpend > 0 ? pct(mtdSpend, yoySpend) : null,
+    ytdSpend,
+    ytdSpendPrior,
+    ytdChange: ytdSpendPrior > 0 ? pct(ytdSpend, ytdSpendPrior) : null,
+  };
 }
 
 export type DashboardData = {
@@ -142,12 +179,12 @@ export default function Dashboard() {
   const now = new Date();
   const monthLabel = now.toLocaleString("en-US", { month: "long", year: "numeric" });
 
-  // Derive portfolio health counts from ad spend change per client
+  // Derive portfolio health counts from YoY ad spend per client
   const growing = dashboard?.clients.filter(
-    (c) => (getAdMetrics(c).adSpendChange ?? 0) > 5
+    (c) => (getAdMetrics(c).yoyChange ?? 0) > 5
   ).length ?? 0;
   const declining = dashboard?.clients.filter(
-    (c) => (getAdMetrics(c).adSpendChange ?? 0) < -5
+    (c) => (getAdMetrics(c).yoyChange ?? 0) < -5
   ).length ?? 0;
   const flat = (dashboard?.totals.clientCount ?? 0) - growing - declining;
 
@@ -318,14 +355,28 @@ function HealthSummaryCards({
     clientCount,
   } = dashboard.totals;
 
-  // YTD spend: sum analytics history for current year across all clients
-  const currentYear = String(new Date().getFullYear());
-  const ytdAdSpend = dashboard.clients.reduce((sum, c) => {
-    const ytd = (getAdMetrics(c).history ?? [])
-      .filter((h) => typeof h.period === "string" && h.period.startsWith(currentYear))
-      .reduce((s, h) => s + (h.adSpend ?? 0), 0);
-    return sum + ytd;
-  }, 0);
+  // Aggregate YoY and YTD from getAdMetrics (computed from history client-side)
+  const portfolioMetrics = dashboard.clients.reduce(
+    (acc, c) => {
+      const m = getAdMetrics(c);
+      return {
+        yoySpend:      acc.yoySpend      + (m.yoySpend      ?? 0),
+        ytdSpend:      acc.ytdSpend      + (m.ytdSpend      ?? 0),
+        ytdSpendPrior: acc.ytdSpendPrior + (m.ytdSpendPrior ?? 0),
+      };
+    },
+    { yoySpend: 0, ytdSpend: 0, ytdSpendPrior: 0 }
+  );
+
+  const pct = (a: number, b: number) =>
+    b > 0 ? Math.round(((a - b) / b) * 10000) / 100 : null;
+
+  const portfolioYoyChange = portfolioMetrics.yoySpend > 0
+    ? pct(totalAdSpend, portfolioMetrics.yoySpend)
+    : null;
+  const portfolioYtdChange = portfolioMetrics.ytdSpendPrior > 0
+    ? pct(portfolioMetrics.ytdSpend, portfolioMetrics.ytdSpendPrior)
+    : null;
 
   return (
     <div className="space-y-3" data-testid="health-summary">
@@ -345,22 +396,25 @@ function HealthSummaryCards({
                 <span className="text-muted-foreground">—</span>
               )
             }
-            sub={<StatChange change={totalAdSpendChange} label="MoM" />}
+            sub={
+              <div className="space-y-1">
+                <StatChange change={totalAdSpendChange} label="MoM" />
+                <StatChange change={portfolioYoyChange} label="YoY" />
+              </div>
+            }
           />
 
           <KpiCard
             label="YTD Ad Spend"
             highlight
             value={
-              ytdAdSpend > 0 ? (
-                formatCurrency(ytdAdSpend)
+              portfolioMetrics.ytdSpend > 0 ? (
+                formatCurrency(portfolioMetrics.ytdSpend)
               ) : (
                 <span className="text-muted-foreground">—</span>
               )
             }
-            sub={
-              <span className="text-xs text-muted-foreground">Jan–now, current year</span>
-            }
+            sub={<StatChange change={portfolioYtdChange} label="vs last year" />}
           />
 
           <KpiCard

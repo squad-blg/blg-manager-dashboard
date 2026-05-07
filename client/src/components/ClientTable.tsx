@@ -215,6 +215,8 @@ type SortField =
   | "name"
   | "mtdSpend"
   | "mom"
+  | "yoy"
+  | "ytdSpend"
   | "roas"
   | "revenue"
   | "lastTouch"
@@ -251,6 +253,14 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
       case "mom":
         va = getAdMetrics(a).adSpendChange ?? -999;
         vb = getAdMetrics(b).adSpendChange ?? -999;
+        break;
+      case "yoy":
+        va = getAdMetrics(a).yoyChange ?? -999;
+        vb = getAdMetrics(b).yoyChange ?? -999;
+        break;
+      case "ytdSpend":
+        va = getAdMetrics(a).ytdSpend ?? 0;
+        vb = getAdMetrics(b).ytdSpend ?? 0;
         break;
       case "roas":
         va = getAdMetrics(a).mtdRoas ?? -999;
@@ -329,7 +339,20 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
               >
                 MoM <SortIcon field="mom" />
               </th>
-              <th className={thStatic}>YTD Ad Spend</th>
+              <th
+                className={thClass}
+                onClick={() => handleSort("yoy")}
+                data-testid="sort-yoy"
+              >
+                YoY <SortIcon field="yoy" />
+              </th>
+              <th
+                className={thClass}
+                onClick={() => handleSort("ytdSpend")}
+                data-testid="sort-ytdspend"
+              >
+                YTD Spend <SortIcon field="ytdSpend" />
+              </th>
               {/* Revenue — context only */}
               <th
                 className={thClass}
@@ -370,13 +393,6 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                 MANAGER_COLORS[client.managerId] ?? mgr?.color ?? "#6366f1";
 
               // YTD spend: sum history for current year
-              const currentYear = String(new Date().getFullYear());
-              const ytdSpend = (analytics.history ?? [])
-                .filter(
-                  (h) =>
-                    typeof h.period === "string" && h.period.startsWith(currentYear)
-                )
-                .reduce((s, h) => s + (h.adSpend ?? 0), 0);
 
               return (
                 <tr
@@ -425,15 +441,20 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                     )}
                   </td>
 
-                  {/* MoM spend change */}
+                  {/* MoM */}
                   <td className="px-4 py-3">
-                    <TrendBadge change={analytics?.adSpendChange} />
+                    <TrendBadge change={analytics.adSpendChange} />
                   </td>
 
-                  {/* YTD Ad Spend — computed from history */}
+                  {/* YoY (this month vs same month last year) */}
+                  <td className="px-4 py-3">
+                    <TrendBadge change={analytics.yoyChange} />
+                  </td>
+
+                  {/* YTD Ad Spend */}
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
-                    {ytdSpend > 0 ? (
-                      formatCurrency(ytdSpend)
+                    {(analytics.ytdSpend ?? 0) > 0 ? (
+                      formatCurrency(analytics.ytdSpend!)
                     ) : (
                       <span className="text-muted-foreground text-sm">—</span>
                     )}
