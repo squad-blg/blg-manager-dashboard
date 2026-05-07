@@ -327,9 +327,9 @@ export default function Dashboard() {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatCurrency(v: number) {
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
-  return `$${v.toFixed(0)}`;
+  if (v >= 1_000_000) return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (v >= 1_000) return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function StatChange({ change, label }: { change: number | null | undefined; label: string }) {
@@ -351,7 +351,7 @@ function StatChange({ change, label }: { change: number | null | undefined; labe
         <Minus className="w-3.5 h-3.5 shrink-0" />
       )}
       {change > 0 ? "+" : ""}
-      {change.toFixed(1)}% {label}
+      {change.toFixed(2)}% {label}
     </span>
   );
 }
@@ -535,7 +535,7 @@ function HealthSummaryCards({
             label="MTD ROAS"
             value={
               portfolioMtdRoas != null ? (
-                `${portfolioMtdRoas.toFixed(1)}x`
+                `${portfolioMtdRoas.toFixed(2)}x`
               ) : (
                 <span className="text-muted-foreground">—</span>
               )
@@ -543,7 +543,7 @@ function HealthSummaryCards({
             sub={
               <span className="text-xs text-muted-foreground">
                 {portfolioMtdRoas != null
-                  ? `$${portfolioMtdRoas.toFixed(2)} rev per $1 spent`
+                  ? `$${portfolioMtdRoas.toFixed(2)} revenue per $1 spent`
                   : "Awaiting revenue data"}
               </span>
             }
