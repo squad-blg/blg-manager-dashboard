@@ -19,6 +19,7 @@ export interface MetaAdsMetrics {
   adSpend: number;
   revenue: number;   // purchase conversion value
   leads: number;
+  purchases: number; // purchase conversions (for ecommerce/rental clients)
   costPerLead: number;
 }
 
@@ -67,7 +68,7 @@ export async function fetchMetaAdsMetrics(
     )
     .reduce((sum: number, a: any) => sum + parseFloat(a.value ?? "0"), 0);
 
-  // Leads: count of lead actions
+  // Leads: count of lead actions (lead gen clients)
   const leads = (data.actions ?? [])
     .filter((a: any) =>
       ["lead", "offsite_conversion.fb_pixel_lead", "onsite_conversion.lead_grouped"].includes(
@@ -76,12 +77,26 @@ export async function fetchMetaAdsMetrics(
     )
     .reduce((sum: number, a: any) => sum + parseInt(a.value ?? "0", 10), 0);
 
-  const costPerLead = leads > 0 ? Math.round((adSpend / leads) * 100) / 100 : 0;
+  // Purchases: count of purchase actions (ecommerce/rental clients like ERS)
+  const purchases = (data.actions ?? [])
+    .filter((a: any) =>
+      ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase"].includes(
+        a.action_type
+      )
+    )
+    .reduce((sum: number, a: any) => sum + parseInt(a.value ?? "0", 10), 0);
+
+  // For cost per conversion: use purchases if available, otherwise leads
+  const conversions = purchases > 0 ? purchases : leads;
+  const costPerLead = conversions > 0 ? Math.round((adSpend / conversions) * 100) / 100 : 0;
+
+  console.log(`[meta:${adAccountId}] spend=$${adSpend} leads=${leads} purchases=${purchases} revenue=$${Math.round(revenue * 100) / 100}`);
 
   return {
     adSpend: Math.round(adSpend * 100) / 100,
     revenue: Math.round(revenue * 100) / 100,
     leads,
+    purchases,
     costPerLead,
   };
 }

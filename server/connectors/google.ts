@@ -114,6 +114,7 @@ export async function fetchGoogleAdsMetrics(
 // ─── GA4 ─────────────────────────────────────────────────────────────────────
 export interface GA4Metrics {
   sessions: number;
+  totalUsers: number;
 }
 
 /**
@@ -130,7 +131,7 @@ export async function fetchGA4Metrics(
     url,
     {
       dateRanges: [{ startDate, endDate }],
-      metrics: [{ name: "sessions" }],
+      metrics: [{ name: "sessions" }, { name: "totalUsers" }],
     },
     {
       headers: {
@@ -141,7 +142,9 @@ export async function fetchGA4Metrics(
     }
   );
 
-  const sessions =
-    parseInt(res.data?.rows?.[0]?.metricValues?.[0]?.value ?? "0", 10);
-  return { sessions };
+  const row = res.data?.rows?.[0]?.metricValues ?? [];
+  const sessions   = parseInt(row[0]?.value ?? "0", 10);
+  const totalUsers = parseInt(row[1]?.value ?? "0", 10);
+  console.log(`[ga4:${propertyId}] sessions=${sessions} totalUsers=${totalUsers}`);
+  return { sessions, totalUsers };
 }
