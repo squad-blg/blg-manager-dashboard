@@ -316,7 +316,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const [year, month] = targetPeriod.split("-").map(Number);
     const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
     const lastDay = new Date(year, month, 0).getDate();
-    const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    // For the current month use today as endDate — using month-end causes Meta's
+    // attribution window to pull in conversions from prior months, inflating counts.
+    // For historical months always use the last day of the month.
+    const isCurrentMonth = year === now.getFullYear() && month === (now.getMonth() + 1);
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const endDate = isCurrentMonth
+      ? todayStr
+      : `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
     // Respond immediately — sync runs in background
     res.json({ ok: true, period: targetPeriod, startDate, endDate, message: "Sync started" });
