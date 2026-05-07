@@ -10,6 +10,7 @@ import { extractTextFromFile, chunkText, chat } from "./ai";
 import { getGoogleAccessToken, fetchGoogleAdsMetrics, fetchGA4Metrics } from "./connectors/google";
 import { fetchMetaAdsMetrics, refreshMetaToken } from "./connectors/meta";
 import { fetchERSMetrics } from "./connectors/ers";
+import { fetchSheetsRevenue } from "./connectors/googlesheets";
 import { fetchIOMetrics } from "./connectors/io";
 
 // Ensure uploads directory exists
