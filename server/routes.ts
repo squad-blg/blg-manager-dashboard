@@ -49,6 +49,118 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const client = storage.createClient(req.body);
       res.json(client);
+
+      // Auto-backfill last 13 months in the background so YoY/YTD are
+      // populated immediately for any new client.
+      setImmediate(async () => {
+        console.log(`[backfill] Starting 13-month backfill for new client: ${client.name}`);
+        const now = new Date();
+        const periods: string[] = [];
+        let y = now.getFullYear();
+        let m = now.getMonth() + 1; // current month — will be synced first by the normal sync cron
+        // Go back 13 months (skip current month — already synced on creation)
+        for (let i = 0; i < 13; i++) {
+          m -= 1;
+          if (m === 0) { m = 12; y -= 1; }
+          periods.push(`${y}-${String(m).padStart(2, "0")}`);
+        }
+
+        const googleCreds = storage.getCredentials().find((c) => c.service === "google_oauth");
+        const mccId       = storage.getCredentials().find((c) => c.service === "google_mcc_id");
+        const metaCreds   = storage.getCredentials().find((c) => c.service === "meta_token");
+
+        let googleAccessToken: string | null = null;
+        if (googleCreds) {
+          try {
+            const [cid, csec, rt] = googleCreds.key.split("|");
+            googleAccessToken = await getGoogleAccessToken(cid, csec, rt);
+          } catch (e: any) {
+            console.error("[backfill] Google token refresh failed:", e.message);
+          }
+        }
+
+        for (const period of periods) {
+          const [py, pm] = period.split("-").map(Number);
+          const startDate = `${py}-${String(pm).padStart(2, "0")}-01`;
+          const lastDay = new Date(py, pm, 0).getDate();
+          const endDate = `${py}-${String(pm).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+          const fetchedAt = new Date().toISOString();
+
+          try {
+            // ERS
+            if (client.platform === "ERS" && client.ersFolder && client.ersApiKey && client.ersDevKey) {
+              try {
+                const m2 = await fetchERSMetrics(client.ersFolder, client.ersApiKey, client.ersDevKey, startDate, endDate);
+                storage.upsertRevenueSnapshot({ clientId: client.id, period, periodType: "month", revenue: m2.revenue, orderCount: m2.orderCount, fetchedAt });
+              } catch (e: any) { console.error(`[backfill] ${client.name} ERS ${period}:`, e.message); }
+            }
+
+            // IO
+            if (client.platform === "IO" && client.ioAccountId && client.ioApiKey) {
+              try {
+                const m2 = await fetchIOMetrics(client.ioAccountId, client.ioApiKey, startDate, endDate);
+                storage.upsertRevenueSnapshot({ clientId: client.id, period, periodType: "month", revenue: m2.revenue, orderCount: m2.orderCount, fetchedAt });
+              } catch (e: any) { console.error(`[backfill] ${client.name} IO ${period}:`, e.message); }
+            }
+
+            // Google Ads + GA4
+            if (googleAccessToken && client.googleAdsCustomerId) {
+              try {
+                const ads = await fetchGoogleAdsMetrics(
+                  googleAccessToken, client.googleAdsCustomerId,
+                  mccId?.key ?? client.googleAdsCustomerId, startDate, endDate
+                );
+                const hasOwnRevenuePlatform = client.platform === "ERS" || client.platform === "IO";
+                if (!hasOwnRevenuePlatform) {
+                  storage.upsertRevenueSnapshot({ clientId: client.id, period, periodType: "month", revenue: ads.revenue, orderCount: ads.conversions, fetchedAt });
+                }
+                let sessions = 0;
+                if (client.ga4PropertyId) {
+                  try {
+                    const ga4 = await fetchGA4Metrics(googleAccessToken, client.ga4PropertyId, startDate, endDate);
+                    sessions = ga4.sessions;
+                  } catch (e: any) { console.error(`[backfill] ${client.name} GA4 ${period}:`, e.message); }
+                }
+                const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === period);
+                const metaSpend = existing?.metaAdSpend ?? 0;
+                storage.upsertAnalyticsSnapshot({
+                  clientId: client.id, period, periodType: "month",
+                  googleAdSpend: ads.adSpend, metaAdSpend: metaSpend,
+                  adSpend: Math.round((ads.adSpend + metaSpend) * 100) / 100,
+                  sessions, conversions: ads.conversions,
+                  leads: existing?.leads ?? 0, costPerLead: existing?.costPerLead ?? 0,
+                  conversionRate: existing?.conversionRate ?? 0,
+                  impressions: existing?.impressions ?? 0, clicks: existing?.clicks ?? 0, fetchedAt,
+                });
+              } catch (e: any) { console.error(`[backfill] ${client.name} Google Ads ${period}:`, e.message); }
+            }
+
+            // Meta Ads
+            if (metaCreds && client.metaAdAccountId) {
+              try {
+                const m2 = await fetchMetaAdsMetrics(client.metaAdAccountId, metaCreds.key, startDate, endDate);
+                const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === period);
+                const googleSpend = existing?.googleAdSpend ?? 0;
+                const leads = m2.leads;
+                storage.upsertAnalyticsSnapshot({
+                  clientId: client.id, period, periodType: "month",
+                  googleAdSpend: googleSpend, metaAdSpend: m2.adSpend,
+                  adSpend: Math.round((googleSpend + m2.adSpend) * 100) / 100,
+                  leads, costPerLead: leads > 0 ? Math.round(((googleSpend + m2.adSpend) / leads) * 100) / 100 : 0,
+                  sessions: existing?.sessions ?? 0, conversions: existing?.conversions ?? 0,
+                  conversionRate: existing?.conversionRate ?? 0,
+                  impressions: existing?.impressions ?? 0, clicks: existing?.clicks ?? 0, fetchedAt,
+                });
+              } catch (e: any) { console.error(`[backfill] ${client.name} Meta ${period}:`, e.message); }
+            }
+
+            console.log(`[backfill] ${client.name} ${period} done`);
+          } catch (e: any) {
+            console.error(`[backfill] ${client.name} ${period} unexpected:`, e.message);
+          }
+        }
+        console.log(`[backfill] ${client.name} complete — ${periods.length} months backfilled`);
+      });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
@@ -357,38 +469,70 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const { managerId } = req.query;
     const clients = storage.getClients(managerId as string | undefined);
     const now = new Date();
+
+    // Period helpers
     const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const prevPeriod = (() => {
+    // MoM: same month, prior month
+    const momPeriod = (() => {
       const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     })();
-    const currentYear = String(now.getFullYear());
-    const prevYear = String(now.getFullYear() - 1);
+    // YoY: same month last year
+    const yoyPeriod = `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    // YTD: Jan–current month this year
+    const ytdPrefixCurrent = String(now.getFullYear());
+    // YTD prior: Jan–current month last year
+    const ytdPrefixPrior = String(now.getFullYear() - 1);
+
+    const pct = (a?: number | null, b?: number | null): number | null => {
+      if (a == null || b == null || b === 0) return null;
+      return Math.round(((a - b) / b) * 10000) / 100;
+    };
 
     const summary = clients.map((client) => {
       const monthlyRevenue = storage.getRevenueSnapshots(client.id, "month");
-      const yearlyRevenue = storage.getRevenueSnapshots(client.id, "year");
       const analytics = storage.getAnalyticsSnapshots(client.id, "month");
 
-      const mtd = monthlyRevenue.find((r) => r.period === currentPeriod);
-      const mtdPrior = monthlyRevenue.find((r) => r.period === prevPeriod);
-      const ytd = yearlyRevenue.find((r) => r.period === currentYear);
-      const ytdPrior = yearlyRevenue.find((r) => r.period === prevYear);
-      const analyticsNow = analytics.find((a) => a.period === currentPeriod);
-      const analyticsPrior = analytics.find((a) => a.period === prevPeriod);
+      // ── Ad spend ──────────────────────────────────────────────────────────
+      const aNow   = analytics.find(a => a.period === currentPeriod);
+      const aMoM   = analytics.find(a => a.period === momPeriod);      // prior month
+      const aYoY   = analytics.find(a => a.period === yoyPeriod);      // same month last year
 
-      const pct = (a?: number | null, b?: number | null) => {
-        if (!a || !b || b === 0) return null;
-        return Math.round(((a - b) / b) * 10000) / 100;
-      };
+      const mtdSpend  = aNow?.adSpend  ?? 0;
+      const momSpend  = aMoM?.adSpend  ?? 0;
+      const yoySpend  = aYoY?.adSpend  ?? 0;
+      const momChange = pct(mtdSpend, momSpend);   // MoM: this month vs last month
+      const yoyChange = pct(mtdSpend, yoySpend);   // YoY: this month vs same month last year
 
-      const momChange = pct(mtd?.revenue, mtdPrior?.revenue);
-      const yoyChange = pct(ytd?.revenue, ytdPrior?.revenue);
+      // YTD spend: sum Jan–currentMonth this year vs same months last year
+      const ytdSpendCurrent = analytics
+        .filter(a => a.period.startsWith(ytdPrefixCurrent) && a.period <= currentPeriod)
+        .reduce((s, a) => s + (a.adSpend ?? 0), 0);
+      const ytdSpendPrior = analytics
+        .filter(a => a.period.startsWith(ytdPrefixPrior) && a.period <= yoyPeriod)
+        .reduce((s, a) => s + (a.adSpend ?? 0), 0);
+      const ytdChange = pct(ytdSpendCurrent, ytdSpendPrior);
 
-      // Churn risk: derived from revenue trend + last touch recency
-      // High risk: YoY down >10% AND last touch >60 days ago
-      // Medium risk: YoY down >5% OR last touch >45 days ago
-      // Low: otherwise
+      // ── Revenue (context only, no trends) ─────────────────────────────────
+      const mtdRevSnap = monthlyRevenue.find(r => r.period === currentPeriod);
+      const ytdRevenue = monthlyRevenue
+        .filter(r => r.period.startsWith(ytdPrefixCurrent) && r.period <= currentPeriod)
+        .reduce((s, r) => s + r.revenue, 0);
+
+      // ── ROAS ──────────────────────────────────────────────────────────────
+      const mtdRevenue = mtdRevSnap?.revenue ?? 0;
+      const mtdRoas = mtdSpend > 0 && mtdRevenue > 0
+        ? Math.round((mtdRevenue / mtdSpend) * 100) / 100 : null;
+      const ytdRoas = ytdSpendCurrent > 0 && ytdRevenue > 0
+        ? Math.round((ytdRevenue / ytdSpendCurrent) * 100) / 100 : null;
+
+      // ── Other ad metrics ──────────────────────────────────────────────────
+      const mtdLeads    = aNow?.leads    ?? 0;
+      const mtdSessions = aNow?.sessions ?? 0;
+      const momLeads    = aMoM?.leads    ?? 0;
+      const yoyLeads    = aYoY?.leads    ?? 0;
+
+      // ── Churn risk: based on YoY ad spend trend + last touch ──────────────
       const lastTouchDaysAgo = client.lastTouchDate
         ? Math.floor((now.getTime() - new Date(client.lastTouchDate).getTime()) / (1000 * 60 * 60 * 24))
         : null;
@@ -399,58 +543,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         churnRisk = "medium";
       }
 
-      const adSpend = analyticsNow?.adSpend ?? 0;
-      const adSpendPrior = analyticsPrior?.adSpend ?? 0;
-      const adSpendChange = pct(adSpend, adSpendPrior);
-      // ROAS = Revenue / Ad Spend (null if no spend)
-      const mtdRoas = adSpend > 0 && (mtd?.revenue ?? 0) > 0
-        ? Math.round(((mtd?.revenue ?? 0) / adSpend) * 100) / 100
-        : null;
-      const ytdRoas = (() => {
-        // Sum ad spend across all months in current year for YTD ROAS
-        const now2 = new Date();
-        const ytdSpend = analytics
-          .filter(a => a.period.startsWith(String(now2.getFullYear())) && a.period <= currentPeriod)
-          .reduce((s, a) => s + (a.adSpend ?? 0), 0);
-        return ytdSpend > 0 && (ytd?.revenue ?? 0) > 0
-          ? Math.round(((ytd?.revenue ?? 0) / ytdSpend) * 100) / 100
-          : null;
-      })();
+      // ── History for chart (last 13 months + same months prior year) ───────
+      const history = analytics
+        .slice(0, 13)
+        .reverse()
+        .map(a => {
+          const priorPeriod = `${parseInt(a.period.split('-')[0]) - 1}-${a.period.split('-')[1]}`;
+          const priorA = analytics.find(x => x.period === priorPeriod);
+          return {
+            period: a.period,
+            adSpend: a.adSpend ?? null,
+            adSpendPriorYear: priorA?.adSpend ?? null,
+            leads: a.leads ?? null,
+            sessions: a.sessions ?? null,
+          };
+        });
 
       return {
         client,
-        revenue: {
-          mtd: mtd?.revenue ?? 0,
-          mtdPrior: mtdPrior?.revenue ?? 0,
-          mtdChange: momChange,
-          ytd: ytd?.revenue ?? 0,
-          ytdPrior: ytdPrior?.revenue ?? 0,
-          ytdChange: yoyChange,
-          history: monthlyRevenue.slice(0, 13).reverse(),
-        },
-        analytics: {
-          sessions: analyticsNow?.sessions ?? 0,
-          sessionsPrior: analyticsPrior?.sessions ?? 0,
-          sessionsChange: pct(analyticsNow?.sessions, analyticsPrior?.sessions),
-          leads: analyticsNow?.leads ?? 0,
-          leadsPrior: analyticsPrior?.leads ?? 0,
-          leadsChange: pct(analyticsNow?.leads, analyticsPrior?.leads),
-          adSpend,
-          adSpendPrior,
-          adSpendChange,
-          costPerLead: analyticsNow?.costPerLead ?? 0,
-          conversionRate: analyticsNow?.conversionRate ?? 0,
+        ads: {
+          mtdSpend,
+          momSpend,
+          momChange,
+          yoySpend,
+          yoyChange,
+          ytdSpend: ytdSpendCurrent,
+          ytdSpendPrior,
+          ytdChange,
+          mtdLeads,
+          momLeads,
+          leadsChange: pct(mtdLeads, momLeads),
+          yoyLeads,
+          leadsYoyChange: pct(mtdLeads, yoyLeads),
+          mtdSessions,
           mtdRoas,
           ytdRoas,
-          history: analytics.slice(0, 13).map(a => {
-            const rev = monthlyRevenue.find(r => r.period === a.period)?.revenue ?? 0;
-            return {
-              ...a,
-              roas: (a.adSpend ?? 0) > 0 && rev > 0
-                ? Math.round((rev / (a.adSpend ?? 1)) * 100) / 100
-                : null,
-            };
-          }).reverse(),
+          history,
+        },
+        revenue: {
+          mtd: mtdRevenue,
+          ytd: ytdRevenue,
         },
         health: {
           churnRisk,
@@ -461,59 +593,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
     });
 
-    // Totals
-    const totalMtdRevenue = summary.reduce((s, c) => s + c.revenue.mtd, 0);
-    const totalMtdPriorRevenue = summary.reduce((s, c) => s + c.revenue.mtdPrior, 0);
-    const totalYtdRevenue = summary.reduce((s, c) => s + c.revenue.ytd, 0);
-    const totalYtdPriorRevenue = summary.reduce((s, c) => s + c.revenue.ytdPrior, 0);
-    const totalLeads = summary.reduce((s, c) => s + c.analytics.leads, 0);
-    const totalAdSpend = summary.reduce((s, c) => s + c.analytics.adSpend, 0);
-    const totalAdSpendPrior = summary.reduce((s, c) => s + c.analytics.adSpendPrior, 0);
-    const totalSessions = summary.reduce((s, c) => s + c.analytics.sessions, 0);
-    // Portfolio ROAS: total MTD revenue / total MTD ad spend
-    const portfolioMtdRoas = totalAdSpend > 0 && totalMtdRevenue > 0
-      ? Math.round((totalMtdRevenue / totalAdSpend) * 100) / 100
-      : null;
-    const portfolioYtdRoas = (() => {
-      const ytdSpend = summary.reduce((s, c) => s + (c.analytics.ytdRoas !== null ? 0 : 0), 0); // recalc below
-      // Use per-client ytdRoas weighted by spend
-      const totalYtdSpend = summary.reduce((s, c) => {
-        // We need ytd spend — approximate from analytics history
-        const now2 = new Date();
-        const cp = `${now2.getFullYear()}-${String(now2.getMonth() + 1).padStart(2, "0")}`;
-        const clientYtdSpend = c.analytics.history
-          .filter((a: any) => typeof a.period === 'string' && a.period.startsWith(String(now2.getFullYear())) && a.period <= cp)
-          .reduce((ss: number, a: any) => ss + (a.adSpend ?? 0), 0);
-        return s + clientYtdSpend;
-      }, 0);
-      return totalYtdSpend > 0 && totalYtdRevenue > 0
-        ? Math.round((totalYtdRevenue / totalYtdSpend) * 100) / 100
-        : null;
-    })();
+    // ── Portfolio totals ───────────────────────────────────────────────────
+    const totalMtdSpend     = summary.reduce((s, c) => s + c.ads.mtdSpend, 0);
+    const totalMomSpend     = summary.reduce((s, c) => s + c.ads.momSpend, 0);
+    const totalYoySpend     = summary.reduce((s, c) => s + c.ads.yoySpend, 0);
+    const totalYtdSpend     = summary.reduce((s, c) => s + c.ads.ytdSpend, 0);
+    const totalYtdSpendPrior = summary.reduce((s, c) => s + c.ads.ytdSpendPrior, 0);
+    const totalLeads        = summary.reduce((s, c) => s + c.ads.mtdLeads, 0);
+    const totalSessions     = summary.reduce((s, c) => s + c.ads.mtdSessions, 0);
+    const totalMtdRevenue   = summary.reduce((s, c) => s + c.revenue.mtd, 0);
+    const totalYtdRevenue   = summary.reduce((s, c) => s + c.revenue.ytd, 0);
+
+    // Portfolio ROAS
+    const portfolioMtdRoas = totalMtdSpend > 0 && totalMtdRevenue > 0
+      ? Math.round((totalMtdRevenue / totalMtdSpend) * 100) / 100 : null;
+    const portfolioYtdRoas = totalYtdSpend > 0 && totalYtdRevenue > 0
+      ? Math.round((totalYtdRevenue / totalYtdSpend) * 100) / 100 : null;
+
+    // Growing/flat/declining based on YoY ad spend
+    const growing   = summary.filter(c => (c.ads.yoyChange ?? 0) > 5).length;
+    const declining = summary.filter(c => (c.ads.yoyChange ?? 0) < -5).length;
+    const flat      = summary.length - growing - declining;
 
     res.json({
       totals: {
-        mtdRevenue: totalMtdRevenue,
-        mtdRevenueChange:
-          totalMtdPriorRevenue > 0
-            ? Math.round(((totalMtdRevenue - totalMtdPriorRevenue) / totalMtdPriorRevenue) * 10000) / 100
-            : null,
-        ytdRevenue: totalYtdRevenue,
-        ytdRevenueChange:
-          totalYtdPriorRevenue > 0
-            ? Math.round(((totalYtdRevenue - totalYtdPriorRevenue) / totalYtdPriorRevenue) * 10000) / 100
-            : null,
+        mtdSpend: totalMtdSpend,
+        momChange: pct(totalMtdSpend, totalMomSpend),
+        yoyChange: pct(totalMtdSpend, totalYoySpend),
+        ytdSpend: totalYtdSpend,
+        ytdChange: pct(totalYtdSpend, totalYtdSpendPrior),
         totalLeads,
-        totalAdSpend,
-        totalAdSpendPrior,
-        totalAdSpendChange:
-          totalAdSpendPrior > 0
-            ? Math.round(((totalAdSpend - totalAdSpendPrior) / totalAdSpendPrior) * 10000) / 100
-            : null,
         totalSessions,
+        mtdRevenue: totalMtdRevenue,
+        ytdRevenue: totalYtdRevenue,
         portfolioMtdRoas,
         portfolioYtdRoas,
         clientCount: clients.length,
+        growing,
+        flat,
+        declining,
       },
       clients: summary,
     });
