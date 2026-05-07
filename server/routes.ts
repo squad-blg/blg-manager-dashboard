@@ -421,27 +421,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               const totalSpend = Math.round((googleSpend + m.adSpend) * 100) / 100;
               const leads = m.leads;
               const metaPurchases = m.purchases ?? 0;
-              // For rental/ecommerce clients, purchases are the primary Meta conversion
-              // For lead-gen clients, leads are the primary conversion
+              // Use purchases as the lead metric for rental/ecommerce clients,
+              // leads for lead-gen clients. Store the Meta figure directly — do NOT
+              // add to Google conversions as that causes accumulation on each sync.
               const metaConversions = metaPurchases > 0 ? metaPurchases : leads;
-              const existingConversions = existing?.conversions ?? 0;
-              // Combine Google + Meta conversions
-              const totalConversions = existingConversions + (metaPurchases > 0 ? metaPurchases : 0);
+              const googleConversions = existing?.conversions ?? 0;
               storage.upsertAnalyticsSnapshot({
                 clientId: client.id, period: targetPeriod, periodType: "month",
                 googleAdSpend: googleSpend,
                 metaAdSpend: m.adSpend,
                 adSpend: totalSpend,
-                leads: leads > 0 ? leads : metaPurchases,
+                // leads field stores the Meta conversion metric (purchases or leads)
+                leads: metaConversions,
                 costPerLead: metaConversions > 0 ? Math.round((m.adSpend / metaConversions) * 100) / 100 : (existing?.costPerLead ?? 0),
                 sessions: existing?.sessions ?? 0,
-                conversions: totalConversions > 0 ? totalConversions : existingConversions,
+                // Keep Google conversions separate — do not combine with Meta
+                conversions: googleConversions,
                 conversionRate: existing?.conversionRate ?? 0,
                 impressions: existing?.impressions ?? 0,
                 clicks: existing?.clicks ?? 0,
                 fetchedAt,
               });
-              console.log(`[sync] ${client.name} Meta: spend=$${m.adSpend} leads=${leads} purchases=${metaPurchases} (google=$${googleSpend} meta=$${m.adSpend} total=$${totalSpend})`);
+              console.log(`[sync] ${client.name} Meta: spend=$${m.adSpend} leads=${leads} purchases=${metaPurchases} metaConversions=${metaConversions} (google=$${googleSpend} meta=$${m.adSpend} total=$${totalSpend})`);
             } catch (e: any) {
               console.error(`[sync] ${client.name} Meta:`, e.message, e.response?.data ? JSON.stringify(e.response.data).slice(0,500) : '');
             }
