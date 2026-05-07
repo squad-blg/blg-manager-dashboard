@@ -22,6 +22,29 @@ function authBody(devKey: string, apiToken: string, extra: Record<string, string
 }
 
 /**
+ * Normalize an ERS response body into a flat array of row objects.
+ * ERS returns data in multiple shapes depending on endpoint and version:
+ *   - Array:  [ {revenue: 100}, ... ]
+ *   - Object: { "order_123": {revenue: 100}, ... }
+ *   - Nested: { data: [...] } or { data: { "key": {...} } }
+ */
+function normalizeRows(body: any, label: string, folder: string): any[] {
+  if (!body) return [];
+  console.log(`[ers:${folder}] ${label} raw response:`, JSON.stringify(body).slice(0, 600));
+  let inner = body?.data ?? body?.rows ?? body?.results ?? body?.orders ?? body;
+  if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+    const vals = Object.values(inner);
+    if (vals.length > 0 && typeof vals[0] === "object") {
+      inner = vals;
+    } else if (vals.length > 0) {
+      inner = [inner];
+    }
+  }
+  if (!Array.isArray(inner)) return [];
+  return inner;
+}
+
+/**
  * Attempt to extract a revenue number from an unknown ERS response object.
  * ERS API field names vary across versions and endpoints. We log the full
  * response shape so mismatches can be diagnosed from Railway logs.
@@ -109,13 +132,7 @@ export async function fetchERSMetrics(
     const ins = insRes.data;
     console.log(`[ers:${folder}] insights response keys:`, Object.keys(ins ?? {}));
 
-    const rows: any[] = Array.isArray(ins?.data)
-      ? ins.data
-      : Array.isArray(ins?.rows)
-      ? ins.rows
-      : Array.isArray(ins)
-      ? ins
-      : [];
+    const rows: any[] = normalizeRows(ins, "insights", folder);
 
     if (rows.length > 0) {
       revenue = extractRevenue(rows, "insights", folder);
@@ -138,13 +155,7 @@ export async function fetchERSMetrics(
       const s = summaryRes.data;
       console.log(`[ers:${folder}] summary response keys:`, Object.keys(s ?? {}));
 
-      const rows: any[] = Array.isArray(s?.data)
-        ? s.data
-        : Array.isArray(s?.rows)
-        ? s.rows
-        : Array.isArray(s)
-        ? s
-        : [];
+      const rows: any[] = normalizeRows(s, "summary", folder);
 
       if (rows.length > 0) {
         revenue = extractRevenue(rows, "summary", folder);
@@ -169,13 +180,7 @@ export async function fetchERSMetrics(
       const o = ordersRes.data;
       console.log(`[ers:${folder}] orders response keys:`, Object.keys(o ?? {}));
 
-      const rows: any[] = Array.isArray(o?.data)
-        ? o.data
-        : Array.isArray(o?.rows)
-        ? o.rows
-        : Array.isArray(o)
-        ? o
-        : [];
+      const rows: any[] = normalizeRows(o, "orders", folder);
 
       if (rows.length > 0) {
         revenue = extractRevenue(rows, "orders", folder);
