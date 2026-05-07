@@ -145,18 +145,29 @@ export function getAdMetrics(c: ClientSummary): AdMetrics {
 
 export type DashboardData = {
   totals: {
-    mtdRevenue: number;
-    mtdRevenueChange: number | null;
-    ytdRevenue: number;
-    ytdRevenueChange: number | null;
+    // new server shape (ads-centric)
+    mtdSpend?: number;
+    momChange?: number | null;
+    yoyChange?: number | null;
+    ytdSpend?: number;
+    ytdChange?: number | null;
+    // old server shape (analytics-centric) — kept for backwards compat
+    totalAdSpend?: number;
+    totalAdSpendPrior?: number;
+    totalAdSpendChange?: number | null;
+    // common
     totalLeads: number;
-    totalAdSpend: number;
-    totalAdSpendPrior: number;
-    totalAdSpendChange: number | null;
     totalSessions: number;
+    mtdRevenue: number;
+    ytdRevenue: number;
     portfolioMtdRoas: number | null;
     portfolioYtdRoas: number | null;
     clientCount: number;
+    growing?: number;
+    flat?: number;
+    declining?: number;
+    mtdRevenueChange?: number | null;
+    ytdRevenueChange?: number | null;
   };
   clients: ClientSummary[];
 };
@@ -188,32 +199,27 @@ export default function Dashboard() {
     : (dashboard?.clients ?? []);
 
   // Re-aggregate totals from visibleClients
-  const aggregatedTotals = dashboard ? (() => {
-    if (!selectedClient) return dashboard.totals;
-    const clients = visibleClients;
-    const totalAdSpend = clients.reduce((s, c) => s + getAdMetrics(c).adSpend, 0);
-    const totalSessions = clients.reduce((s, c) => s + (getAdMetrics(c).sessions ?? 0), 0);
-    const totalLeads = clients.reduce((s, c) => s + (getAdMetrics(c).leads ?? 0), 0);
-    const mtdRevenue = clients.reduce((s, c) => s + (c.revenue?.mtd ?? 0), 0);
-    const ytdRevenue = clients.reduce((s, c) => s + (c.revenue?.ytd ?? 0), 0);
-    const totalAdSpendPrior = clients.reduce((s, c) => s + (getAdMetrics(c).adSpendPrior ?? 0), 0);
-    const portfolioMtdRoas = totalAdSpend > 0 && mtdRevenue > 0
-      ? Math.round((mtdRevenue / totalAdSpend) * 100) / 100 : null;
-    return {
-      ...dashboard.totals,
-      totalAdSpend,
-      totalAdSpendPrior,
-      totalAdSpendChange: totalAdSpendPrior > 0
-        ? Math.round(((totalAdSpend - totalAdSpendPrior) / totalAdSpendPrior) * 10000) / 100
-        : null,
-      totalSessions,
-      totalLeads,
-      mtdRevenue,
-      ytdRevenue,
-      portfolioMtdRoas,
-      clientCount: clients.length,
-    };
-  })() : null;
+  // Normalise totals — server may return mtdSpend (new) or totalAdSpend (old)
+  function normaliseTotals(t: DashboardData["totals"], clients: ClientSummary[]) {
+    const mtdSpend    = t.mtdSpend    ?? t.totalAdSpend    ?? clients.reduce((s, c) => s + getAdMetrics(c).adSpend, 0);
+    const momChange   = t.momChange   ?? t.totalAdSpendChange ?? null;
+    const yoyChange   = t.yoyChange   ?? null;
+    const ytdSpend    = t.ytdSpend    ?? clients.reduce((s, c) => s + (getAdMetrics(c).ytdSpend ?? 0), 0);
+    const ytdChange   = t.ytdChange   ?? null;
+    const totalLeads    = clients.reduce((s, c) => s + (getAdMetrics(c).leads ?? 0), 0) || t.totalLeads;
+    const totalSessions = clients.reduce((s, c) => s + (getAdMetrics(c).sessions ?? 0), 0) || t.totalSessions;
+    const mtdRevenue  = clients.reduce((s, c) => s + (c.revenue?.mtd ?? 0), 0);
+    const ytdRevenue  = clients.reduce((s, c) => s + (c.revenue?.ytd ?? 0), 0);
+    const portfolioMtdRoas = mtdSpend > 0 && mtdRevenue > 0
+      ? Math.round((mtdRevenue / mtdSpend) * 100) / 100 : t.portfolioMtdRoas;
+    return { ...t, mtdSpend, momChange, yoyChange, ytdSpend, ytdChange,
+      totalLeads, totalSessions, mtdRevenue, ytdRevenue, portfolioMtdRoas,
+      clientCount: clients.length };
+  }
+
+  const aggregatedTotals = dashboard
+    ? normaliseTotals(dashboard.totals, visibleClients)
+    : null;
 
   // Derive portfolio health counts from YoY ad spend per client
   const growing = visibleClients.filter(
@@ -428,8 +434,8 @@ function HealthSummaryCards({
   declining: number;
 }) {
   const {
-    totalAdSpend,
-    totalAdSpendChange,
+    mtdSpend: totalAdSpend,
+    momChange: totalAdSpendChange,
     totalLeads,
     totalSessions,
     mtdRevenue,
