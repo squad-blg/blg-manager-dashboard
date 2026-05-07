@@ -161,6 +161,7 @@ export type DashboardData = {
 
 export default function Dashboard() {
   const [selectedManager, setSelectedManager] = useState<string | null>(null);
+  const [selectedClient, setSelectedClient] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
 
   const { data: managers } = useQuery<Manager[]>({
@@ -179,14 +180,47 @@ export default function Dashboard() {
   const now = new Date();
   const monthLabel = now.toLocaleString("en-US", { month: "long", year: "numeric" });
 
+  // If a specific client is selected, filter down to just that client
+  const visibleClients = selectedClient
+    ? (dashboard?.clients ?? []).filter((c) => c.client.id === selectedClient)
+    : (dashboard?.clients ?? []);
+
+  // Re-aggregate totals from visibleClients
+  const aggregatedTotals = dashboard ? (() => {
+    if (!selectedClient) return dashboard.totals;
+    const clients = visibleClients;
+    const totalAdSpend = clients.reduce((s, c) => s + getAdMetrics(c).adSpend, 0);
+    const totalSessions = clients.reduce((s, c) => s + (getAdMetrics(c).sessions ?? 0), 0);
+    const totalLeads = clients.reduce((s, c) => s + (getAdMetrics(c).leads ?? 0), 0);
+    const mtdRevenue = clients.reduce((s, c) => s + (c.revenue?.mtd ?? 0), 0);
+    const ytdRevenue = clients.reduce((s, c) => s + (c.revenue?.ytd ?? 0), 0);
+    const totalAdSpendPrior = clients.reduce((s, c) => s + (getAdMetrics(c).adSpendPrior ?? 0), 0);
+    const portfolioMtdRoas = totalAdSpend > 0 && mtdRevenue > 0
+      ? Math.round((mtdRevenue / totalAdSpend) * 100) / 100 : null;
+    return {
+      ...dashboard.totals,
+      totalAdSpend,
+      totalAdSpendPrior,
+      totalAdSpendChange: totalAdSpendPrior > 0
+        ? Math.round(((totalAdSpend - totalAdSpendPrior) / totalAdSpendPrior) * 10000) / 100
+        : null,
+      totalSessions,
+      totalLeads,
+      mtdRevenue,
+      ytdRevenue,
+      portfolioMtdRoas,
+      clientCount: clients.length,
+    };
+  })() : null;
+
   // Derive portfolio health counts from YoY ad spend per client
-  const growing = dashboard?.clients.filter(
+  const growing = visibleClients.filter(
     (c) => (getAdMetrics(c).yoyChange ?? 0) > 5
-  ).length ?? 0;
-  const declining = dashboard?.clients.filter(
+  ).length;
+  const declining = visibleClients.filter(
     (c) => (getAdMetrics(c).yoyChange ?? 0) < -5
-  ).length ?? 0;
-  const flat = (dashboard?.totals.clientCount ?? 0) - growing - declining;
+  ).length;
+  const flat = visibleClients.length - growing - declining;
 
   return (
     <div className="dashboard-grid">
@@ -239,24 +273,34 @@ export default function Dashboard() {
                 <Skeleton key={i} className="h-28 rounded-lg" />
               ))}
             </div>
-          ) : dashboard ? (
-            <HealthSummaryCards
-              dashboard={dashboard}
-              growing={growing}
-              flat={flat}
-              declining={declining}
-            />
+          ) : dashboard && aggregatedTotals ? (
+            <>
+              {/* Client selector */}
+              <ClientSelector
+                clients={dashboard.clients}
+                selectedClient={selectedClient}
+                onSelect={(id) => {
+                  setSelectedClient(id);
+                }}
+              />
+              <HealthSummaryCards
+                dashboard={{ ...dashboard, totals: aggregatedTotals, clients: visibleClients }}
+                growing={growing}
+                flat={flat}
+                declining={declining}
+              />
+            </>
           ) : null}
 
-          {dashboard && dashboard.clients.length > 0 && (
-            <RevenueChart clients={dashboard.clients} />
+          {dashboard && visibleClients.length > 0 && (
+            <RevenueChart clients={visibleClients} />
           )}
 
           {isLoading ? (
             <Skeleton className="h-64 rounded-lg" />
           ) : dashboard ? (
             <ClientTable
-              clients={dashboard.clients}
+              clients={visibleClients}
               managers={managers ?? []}
               selectedManager={selectedManager}
             />
@@ -332,6 +376,54 @@ function KpiCard({
     </Card>
   );
 }
+
+
+// ─── Client Selector ─────────────────────────────────────────────────────────
+
+function ClientSelector({
+  clients,
+  selectedClient,
+  onSelect,
+}: {
+  clients: ClientSummary[];
+  selectedClient: string | null;
+  onSelect: (id: string | null) => void;
+}) {
+  if (clients.length <= 1) return null; // no selector needed for single client
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap" data-testid="client-selector">
+      <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider mr-1">
+        View:
+      </span>
+      <button
+        onClick={() => onSelect(null)}
+        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+          selectedClient === null
+            ? "bg-primary text-primary-foreground border-primary"
+            : "bg-transparent border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
+        }`}
+      >
+        All Clients
+      </button>
+      {clients.map((c) => (
+        <button
+          key={c.client.id}
+          onClick={() => onSelect(selectedClient === c.client.id ? null : c.client.id)}
+          className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+            selectedClient === c.client.id
+              ? "bg-primary text-primary-foreground border-primary"
+              : "bg-transparent border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
+          }`}
+        >
+          {c.client.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Health Summary Cards ─────────────────────────────────────────────────────
 
 function HealthSummaryCards({
   dashboard,
