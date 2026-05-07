@@ -389,36 +389,25 @@ function ClientSelector({
   selectedClient: string | null;
   onSelect: (id: string | null) => void;
 }) {
-  if (clients.length <= 1) return null; // no selector needed for single client
+  if (clients.length <= 1) return null;
 
   return (
-    <div className="flex items-center gap-2 flex-wrap" data-testid="client-selector">
-      <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider mr-1">
+    <div className="flex items-center gap-2" data-testid="client-selector">
+      <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider whitespace-nowrap">
         View:
-      </span>
-      <button
-        onClick={() => onSelect(null)}
-        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-          selectedClient === null
-            ? "bg-primary text-primary-foreground border-primary"
-            : "bg-transparent border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
-        }`}
+      </label>
+      <select
+        value={selectedClient ?? ""}
+        onChange={(e) => onSelect(e.target.value === "" ? null : e.target.value)}
+        className="bg-card border border-border rounded-md px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer min-w-[200px]"
       >
-        All Clients
-      </button>
-      {clients.map((c) => (
-        <button
-          key={c.client.id}
-          onClick={() => onSelect(selectedClient === c.client.id ? null : c.client.id)}
-          className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-            selectedClient === c.client.id
-              ? "bg-primary text-primary-foreground border-primary"
-              : "bg-transparent border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
-          }`}
-        >
-          {c.client.name}
-        </button>
-      ))}
+        <option value="">All Clients</option>
+        {clients.map((c) => (
+          <option key={c.client.id} value={c.client.id}>
+            {c.client.name}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
