@@ -387,7 +387,7 @@ function HealthSummaryCards({
         </p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
-            label="MTD Ad Spend"
+            label="MTD Spend"
             highlight
             value={
               totalAdSpend > 0 ? (
@@ -405,7 +405,7 @@ function HealthSummaryCards({
           />
 
           <KpiCard
-            label="YTD Ad Spend"
+            label="YTD Spend"
             highlight
             value={
               portfolioMetrics.ytdSpend > 0 ? (

@@ -330,7 +330,7 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                 onClick={() => handleSort("mtdSpend")}
                 data-testid="sort-mtdspend"
               >
-                MTD Ad Spend <SortIcon field="mtdSpend" />
+                MTD Spend <SortIcon field="mtdSpend" />
               </th>
               <th
                 className={thClass}
@@ -432,7 +432,7 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                     </td>
                   )}
 
-                  {/* MTD Ad Spend */}
+                  {/* MTD Spend */}
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
                     {(analytics?.adSpend ?? 0) > 0 ? (
                       formatCurrency(analytics.adSpend)
@@ -451,7 +451,7 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                     <TrendBadge change={analytics.yoyChange} />
                   </td>
 
-                  {/* YTD Ad Spend */}
+                  {/* YTD Spend */}
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
                     {(analytics.ytdSpend ?? 0) > 0 ? (
                       formatCurrency(analytics.ytdSpend!)
