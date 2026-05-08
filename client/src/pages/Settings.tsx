@@ -212,10 +212,16 @@ export default function SettingsPage() {
                   Fetch the current month's revenue and analytics from all configured platforms.
                 </p>
               </div>
-              <Button size="sm" onClick={handleSync} disabled={syncing} className="gap-1.5">
-                {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                {syncing ? "Syncing..." : "Sync Now"}
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleSync} disabled={syncing} className="gap-1.5">
+                  {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  {syncing ? "Syncing..." : "Sync Now"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleRebackfill} disabled={rebackfilling} className="gap-1.5">
+                  {rebackfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  {rebackfilling ? "Re-syncing..." : "Re-sync All History"}
+                </Button>
+              </div>
             </div>
           </Card>
 
