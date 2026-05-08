@@ -114,6 +114,21 @@ export default function SettingsPage() {
     }
   }
 
+  const [rebackfilling, setRebackfilling] = useState(false);
+
+  async function handleRebackfill() {
+    if (!confirm("This will re-sync all revenue and ad data from January 2024 to now. This may take 5-10 minutes. Continue?")) return;
+    setRebackfilling(true);
+    try {
+      await apiRequest("POST", "/api/rebackfill", {});
+      toast({ title: "Re-backfill started", description: "All historical data is being re-synced. Check back in a few minutes." });
+    } catch (e: any) {
+      toast({ title: "Re-backfill failed", description: e.message });
+    } finally {
+      setRebackfilling(false);
+    }
+  }
+
   async function handleMetaRefresh() {
     setRefreshingMeta(true);
     try {
