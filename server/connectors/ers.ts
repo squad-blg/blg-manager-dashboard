@@ -57,11 +57,23 @@ function extractRevenue(rows: any[], label: string, folder: string): number {
   console.log(`[ers:${folder}] ${label} sample keys:`, sampleKeys);
   console.log(`[ers:${folder}] ${label} sample row:`, JSON.stringify(rows[0]).slice(0, 300));
 
-  // Known field names across ERS versions — extend this list as needed
+  // ERS order fields in priority order:
+  // "total" = full order value including tax (what we want)
+  // "subtotal" = before tax
+  // "paid" = deposits collected so far (NOT what we want)
   const REVENUE_FIELDS = [
-    "revenue", "total", "gross", "order_total", "subtotal",
-    "amount", "grand_total", "total_revenue", "net_revenue",
-    "rental_total", "event_total",
+    "total",         // ERS order total (after tax) — primary
+    "order_total",
+    "grand_total",
+    "total_revenue",
+    "subtotal",      // before tax fallback
+    "revenue",
+    "gross",
+    "net_revenue",
+    "rental_total",
+    "event_total",
+    "amount",
+    // "paid" intentionally excluded — this is deposits collected, not order value
   ];
 
   let revenue = 0;
