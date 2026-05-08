@@ -95,13 +95,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const startDate = `${py}-${String(pm).padStart(2, "0")}-01`;
           const lastDay = new Date(py, pm, 0).getDate();
           const endDate = `${py}-${String(pm).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+          // ERS always uses full month end date to capture all bookings
+          const ersBackfillEndDate = endDate;
           const fetchedAt = new Date().toISOString();
 
           try {
             // ERS
             if (client.platform === "ERS" && client.ersFolder && client.ersApiKey && client.ersDevKey) {
               try {
-                const m2 = await fetchERSMetrics(client.ersFolder, client.ersApiKey, client.ersDevKey, startDate, endDate);
+                const m2 = await fetchERSMetrics(client.ersFolder, client.ersApiKey, client.ersDevKey, startDate, ersBackfillEndDate);
                 storage.upsertRevenueSnapshot({ clientId: client.id, period, periodType: "month", revenue: m2.revenue, orderCount: m2.orderCount, fetchedAt });
               } catch (e: any) { console.error(`[backfill] ${client.name} ERS ${period}:`, e.message); }
             }
@@ -152,12 +154,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 const m2 = await fetchMetaAdsMetrics(client.metaAdAccountId, metaCreds.key, startDate, endDate);
                 const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === period);
                 const googleSpend = existing?.googleAdSpend ?? 0;
-                const leads = m2.leads;
+                const metaPurchases = m2.purchases ?? 0;
+                const metaConversions = metaPurchases > 0 ? metaPurchases : m2.leads;
                 storage.upsertAnalyticsSnapshot({
                   clientId: client.id, period, periodType: "month",
                   googleAdSpend: googleSpend, metaAdSpend: m2.adSpend,
                   adSpend: Math.round((googleSpend + m2.adSpend) * 100) / 100,
-                  leads, costPerLead: leads > 0 ? Math.round(((googleSpend + m2.adSpend) / leads) * 100) / 100 : 0,
+                  leads: metaConversions,
+                  costPerLead: metaConversions > 0 ? Math.round((m2.adSpend / metaConversions) * 100) / 100 : 0,
                   sessions: existing?.sessions ?? 0, conversions: existing?.conversions ?? 0,
                   conversionRate: existing?.conversionRate ?? 0,
                   impressions: existing?.impressions ?? 0, clicks: existing?.clicks ?? 0, fetchedAt,
@@ -175,6 +179,136 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
+  });
+
+  // ─── Full re-backfill ─────────────────────────────────────────────────────
+  // POST /api/rebackfill — wipes all revenue/analytics snapshots and re-syncs
+  // from January 2024 through current month. Use when revenue field changes.
+  app.post("/api/rebackfill", async (req, res) => {
+    const clients = storage.getClients();
+    const { clientId } = req.body; // optional — if provided, only re-backfill that client
+
+    res.json({ ok: true, message: "Full re-backfill started — check Railway logs for progress" });
+
+    setImmediate(async () => {
+      console.log("[rebackfill] Starting full re-backfill...");
+
+      // Build list of all periods from Jan 2024 to current month
+      const now = new Date();
+      const periods: string[] = [];
+      let y = 2024, m = 1;
+      while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth() + 1)) {
+        periods.push(`${y}-${String(m).padStart(2, "0")}`);
+        m++;
+        if (m > 12) { m = 1; y++; }
+      }
+      console.log(`[rebackfill] ${periods.length} months to sync: ${periods[0]} → ${periods[periods.length - 1]}`);
+
+      // Get credentials
+      const creds = storage.getCredentials();
+      const googleCreds = creds.find(c => c.service === "google_oauth");
+      const metaCreds = creds.find(c => c.service === "meta_token");
+      const mccId = creds.find(c => c.service === "google_mcc_id");
+
+      let googleAccessToken: string | null = null;
+      if (googleCreds) {
+        try {
+          const [cid, csec, rt] = googleCreds.key.split("|");
+          googleAccessToken = await getGoogleAccessToken(cid, csec, rt);
+        } catch (e: any) {
+          console.error("[rebackfill] Google token refresh failed:", e.message);
+        }
+      }
+
+      const targetClients = clientId
+        ? clients.filter(c => c.id === clientId)
+        : clients;
+
+      for (const client of targetClients) {
+        console.log(`[rebackfill] Processing ${client.name}...`);
+
+        for (const period of periods) {
+          const [py, pm] = period.split("-").map(Number);
+          const startDate = `${py}-${String(pm).padStart(2, "0")}-01`;
+          const lastDay = new Date(py, pm, 0).getDate();
+          const endDate = `${py}-${String(pm).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+          const fetchedAt = new Date().toISOString();
+
+          try {
+            // ERS — always use full month end date
+            if (client.platform === "ERS" && client.ersFolder && client.ersApiKey && client.ersDevKey) {
+              try {
+                const m2 = await fetchERSMetrics(client.ersFolder, client.ersApiKey, client.ersDevKey, startDate, endDate);
+                storage.upsertRevenueSnapshot({ clientId: client.id, period, periodType: "month", revenue: m2.revenue, orderCount: m2.orderCount, fetchedAt });
+                console.log(`[rebackfill] ${client.name} ERS ${period}: $${m2.revenue} (${m2.orderCount} orders)`);
+              } catch (e: any) { console.error(`[rebackfill] ${client.name} ERS ${period}:`, e.message); }
+            }
+
+            // Google Ads + GA4
+            if (googleAccessToken && client.googleAdsCustomerId) {
+              try {
+                const ads = await fetchGoogleAdsMetrics(
+                  googleAccessToken, client.googleAdsCustomerId,
+                  mccId?.key ?? client.googleAdsCustomerId, startDate, endDate
+                );
+                const hasOwnRevenuePlatform = ["ERS", "IO", "SHEETS"].includes(client.platform);
+                if (!hasOwnRevenuePlatform) {
+                  storage.upsertRevenueSnapshot({ clientId: client.id, period, periodType: "month", revenue: ads.revenue, orderCount: ads.conversions, fetchedAt });
+                }
+                let sessions = 0;
+                if (client.ga4PropertyId) {
+                  try {
+                    const ga4 = await fetchGA4Metrics(googleAccessToken, client.ga4PropertyId, startDate, endDate);
+                    sessions = ga4.sessions;
+                  } catch (e: any) { console.error(`[rebackfill] ${client.name} GA4 ${period}:`, e.message); }
+                }
+                const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === period);
+                storage.upsertAnalyticsSnapshot({
+                  clientId: client.id, period, periodType: "month",
+                  googleAdSpend: ads.adSpend, metaAdSpend: existing?.metaAdSpend ?? 0,
+                  adSpend: Math.round((ads.adSpend + (existing?.metaAdSpend ?? 0)) * 100) / 100,
+                  sessions, conversions: ads.conversions,
+                  leads: existing?.leads ?? 0, costPerLead: existing?.costPerLead ?? 0,
+                  conversionRate: existing?.conversionRate ?? 0,
+                  impressions: existing?.impressions ?? 0, clicks: existing?.clicks ?? 0, fetchedAt,
+                });
+                console.log(`[rebackfill] ${client.name} Google ${period}: $${ads.adSpend} spend`);
+              } catch (e: any) { console.error(`[rebackfill] ${client.name} Google ${period}:`, e.message); }
+            }
+
+            // Meta Ads
+            if (metaCreds && client.metaAdAccountId) {
+              try {
+                const m2 = await fetchMetaAdsMetrics(client.metaAdAccountId, metaCreds.key, startDate, endDate);
+                const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === period);
+                const googleSpend = existing?.googleAdSpend ?? 0;
+                const metaPurchases = m2.purchases ?? 0;
+                const metaConversions = metaPurchases > 0 ? metaPurchases : m2.leads;
+                storage.upsertAnalyticsSnapshot({
+                  clientId: client.id, period, periodType: "month",
+                  googleAdSpend: googleSpend, metaAdSpend: m2.adSpend,
+                  adSpend: Math.round((googleSpend + m2.adSpend) * 100) / 100,
+                  leads: metaConversions,
+                  costPerLead: metaConversions > 0 ? Math.round((m2.adSpend / metaConversions) * 100) / 100 : 0,
+                  sessions: existing?.sessions ?? 0, conversions: existing?.conversions ?? 0,
+                  conversionRate: existing?.conversionRate ?? 0,
+                  impressions: existing?.impressions ?? 0, clicks: existing?.clicks ?? 0, fetchedAt,
+                });
+                console.log(`[rebackfill] ${client.name} Meta ${period}: $${m2.adSpend} spend, ${metaConversions} conversions`);
+              } catch (e: any) { console.error(`[rebackfill] ${client.name} Meta ${period}:`, e.message); }
+            }
+
+            // Small delay to avoid rate limiting
+            await new Promise(r => setTimeout(r, 200));
+
+          } catch (e: any) {
+            console.error(`[rebackfill] ${client.name} ${period} unexpected:`, e.message);
+          }
+        }
+        console.log(`[rebackfill] ${client.name} complete`);
+      }
+      console.log("[rebackfill] Full re-backfill complete!");
+    });
   });
 
   app.patch("/api/clients/:id", (req, res) => {
