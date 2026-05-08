@@ -120,9 +120,31 @@ export async function fetchERSMetrics(
     console.error(`[ers:${folder}] order_counts failed:`, e.message, e.response?.data ?? "");
   }
 
-  // Step 2: Revenue via insights report
+  // Step 2: Try closeout report first — most likely to have total booking value
   let revenue = 0;
 
+  try {
+    const closeoutRes = await axios.post(
+      `${base}/api/report/closeout/`,
+      authBody(devKey, apiToken, { start_date: startDate, end_date: endDate }),
+      { headers: POST_HEADERS, timeout: 20_000 }
+    );
+    const co = closeoutRes.data;
+    console.log(`[ers:${folder}] closeout response keys:`, Object.keys(co ?? {}));
+    console.log(`[ers:${folder}] closeout raw response:`, JSON.stringify(co).slice(0, 800));
+    const coRows: any[] = normalizeRows(co, "closeout", folder);
+    if (coRows.length > 0) {
+      revenue = extractRevenue(coRows, "closeout", folder);
+      console.log(`[ers:${folder}] closeout revenue=$${revenue} from ${coRows.length} rows`);
+    } else {
+      console.log(`[ers:${folder}] closeout returned no rows`);
+    }
+  } catch (e: any) {
+    console.error(`[ers:${folder}] closeout failed:`, e.message, e.response?.data ?? "");
+  }
+
+  // Step 2b: insights report
+  if (revenue === 0) {
   try {
     const insRes = await axios.post(
       `${base}/api/report/insights/`,
@@ -138,11 +160,12 @@ export async function fetchERSMetrics(
       revenue = extractRevenue(rows, "insights", folder);
       console.log(`[ers:${folder}] insights revenue=$${revenue} from ${rows.length} rows`);
     } else {
-      console.log(`[ers:${folder}] insights returned no rows — trying summary fallback`);
+      console.log(`[ers:${folder}] insights returned no rows`);
     }
   } catch (e: any) {
     console.error(`[ers:${folder}] insights failed:`, e.message, e.response?.data ?? "");
   }
+  } // end insights block
 
   // Step 3: Fallback — payments report
   if (revenue === 0) {
@@ -167,7 +190,27 @@ export async function fetchERSMetrics(
     }
   }
 
-  // Step 4: Fallback — summary report WITH date range
+  // Step 4: Fallback — best_sellers report
+  if (revenue === 0) {
+    try {
+      const bsRes = await axios.post(
+        `${base}/api/report/best_sellers/`,
+        authBody(devKey, apiToken, { start_date: startDate, end_date: endDate }),
+        { headers: POST_HEADERS, timeout: 20_000 }
+      );
+      const bs = bsRes.data;
+      console.log(`[ers:${folder}] best_sellers raw response:`, JSON.stringify(bs).slice(0, 800));
+      const bsRows: any[] = normalizeRows(bs, "best_sellers", folder);
+      if (bsRows.length > 0) {
+        revenue = extractRevenue(bsRows, "best_sellers", folder);
+        console.log(`[ers:${folder}] best_sellers revenue=$${revenue} from ${bsRows.length} rows`);
+      }
+    } catch (e: any) {
+      console.error(`[ers:${folder}] best_sellers failed:`, e.message, e.response?.data ?? "");
+    }
+  }
+
+  // Step 5: Fallback — summary report WITH date range
   if (revenue === 0) {
     try {
       const summaryRes = await axios.post(
