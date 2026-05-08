@@ -144,7 +144,30 @@ export async function fetchERSMetrics(
     console.error(`[ers:${folder}] insights failed:`, e.message, e.response?.data ?? "");
   }
 
-  // Step 3: Fallback — summary report WITH date range (was missing date params before)
+  // Step 3: Fallback — payments report
+  if (revenue === 0) {
+    try {
+      const paymentsRes = await axios.post(
+        `${base}/api/report/payments/`,
+        authBody(devKey, apiToken, { start_date: startDate, end_date: endDate }),
+        { headers: POST_HEADERS, timeout: 20_000 }
+      );
+      const p = paymentsRes.data;
+      console.log(`[ers:${folder}] payments response keys:`, Object.keys(p ?? {}));
+      console.log(`[ers:${folder}] payments raw response:`, JSON.stringify(p).slice(0, 600));
+      const pRows: any[] = normalizeRows(p, "payments", folder);
+      if (pRows.length > 0) {
+        revenue = extractRevenue(pRows, "payments", folder);
+        console.log(`[ers:${folder}] payments revenue=$${revenue} from ${pRows.length} rows`);
+      } else {
+        console.log(`[ers:${folder}] payments returned no rows — trying summary fallback`);
+      }
+    } catch (e: any) {
+      console.error(`[ers:${folder}] payments failed:`, e.message, e.response?.data ?? "");
+    }
+  }
+
+  // Step 4: Fallback — summary report WITH date range
   if (revenue === 0) {
     try {
       const summaryRes = await axios.post(
@@ -168,8 +191,8 @@ export async function fetchERSMetrics(
     }
   }
 
-  // Step 4: Last resort — read individual orders if reports still return nothing
-  if (revenue === 0 && matchingOrders > 0) {
+  // Step 5: Last resort — read individual orders if reports still return nothing
+  if (revenue === 0 && orderCount > 0) {
     try {
       console.log(`[ers:${folder}] Attempting order-level read for ${matchingOrders} orders`);
       const ordersRes = await axios.post(
@@ -193,7 +216,7 @@ export async function fetchERSMetrics(
 
   if (revenue === 0 && orderCount > 0) {
     console.warn(
-      `[ers:${folder}] WARNING: orderCount=${orderCount} but revenue=$0 — check logs above for ERS response shape`
+      `[ers:${folder}] ⚠️  orderCount=${orderCount} but revenue=$0 — all report endpoints returned empty data. ERS may require additional permissions.`
     );
   }
 
