@@ -206,7 +206,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     try {
       const { startDate, endDate } = req.body;
-      const m = await fetchERSMetrics(client.ersFolder, client.ersApiKey, client.ersDevKey, startDate, endDate);
+      const m = await fetchERSMetrics(client.ersFolder, client.ersApiKey, client.ersDevKey, startDate, ersEndDate);
       res.json(m);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -316,14 +316,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const [year, month] = targetPeriod.split("-").map(Number);
     const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
     const lastDay = new Date(year, month, 0).getDate();
-    // For the current month use today as endDate — using month-end causes Meta's
-    // attribution window to pull in conversions from prior months, inflating counts.
-    // For historical months always use the last day of the month.
     const isCurrentMonth = year === now.getFullYear() && month === (now.getMonth() + 1);
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    const endDate = isCurrentMonth
-      ? todayStr
-      : `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    const monthEndStr = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    // Meta/Google use today as end date to avoid attribution window inflation
+    // ERS uses full month end to capture all bookings scheduled for the month
+    const endDate = isCurrentMonth ? todayStr : monthEndStr;
+    const ersEndDate = monthEndStr; // ERS always uses full month to capture future bookings
 
     // Respond immediately — sync runs in background
     res.json({ ok: true, period: targetPeriod, startDate, endDate, message: "Sync started" });
@@ -354,7 +353,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               console.warn(`[sync] ${client.name} is ERS but missing credentials (ersFolder=${!!client.ersFolder} ersApiKey=${!!client.ersApiKey} ersDevKey=${!!client.ersDevKey}) — skipping revenue fetch`);
             } else {
               try {
-                const m = await fetchERSMetrics(client.ersFolder, client.ersApiKey, client.ersDevKey, startDate, endDate);
+                const m = await fetchERSMetrics(client.ersFolder, client.ersApiKey, client.ersDevKey, startDate, ersEndDate);
                 storage.upsertRevenueSnapshot({ clientId: client.id, period: targetPeriod, periodType: "month", revenue: m.revenue, orderCount: m.orderCount, fetchedAt });
                 console.log(`[sync] ${client.name} ERS: orders=${m.orderCount} revenue=$${m.revenue}`);
               } catch (e: any) {
