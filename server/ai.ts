@@ -108,20 +108,20 @@ export function buildDataContext(dashboardData: any, managerName?: string): stri
   const scope = managerName ? `${managerName}'s portfolio` : "all clients";
 
   let ctx = `## Live Dashboard Data (${scope})\n`;
-  ctx += `- MTD Revenue: $${totals.mtdRevenue.toLocaleString()} (${totals.mtdRevenueChange !== null ? (totals.mtdRevenueChange > 0 ? "+" : "") + totals.mtdRevenueChange + "% MoM" : "no prior data"})\n`;
-  ctx += `- YTD Revenue: $${totals.ytdRevenue.toLocaleString()} (${totals.ytdRevenueChange !== null ? (totals.ytdRevenueChange > 0 ? "+" : "") + totals.ytdRevenueChange + "% YoY" : "no prior data"})\n`;
-  ctx += `- Total Leads: ${totals.totalLeads.toLocaleString()}\n`;
-  ctx += `- Total Ad Spend: $${totals.totalAdSpend.toLocaleString()}\n`;
+  ctx += `- MTD Revenue: ${safeMoney(totals.mtdRevenue)} (${totals.mtdRevenueChange != null ? (totals.mtdRevenueChange > 0 ? "+" : "") + totals.mtdRevenueChange + "% MoM" : "no prior data"})\n`;
+  ctx += `- YTD Revenue: ${safeMoney(totals.ytdRevenue)} (${totals.ytdRevenueChange != null ? (totals.ytdRevenueChange > 0 ? "+" : "") + totals.ytdRevenueChange + "% YoY" : "no prior data"})\n`;
+  ctx += `- Total Leads: ${safeNum(totals.totalLeads)}\n`;
+  ctx += `- Total Ad Spend: ${safeMoney(totals.totalAdSpend)}\n`;
   ctx += `- Active Clients: ${totals.clientCount}\n\n`;
 
   ctx += `## Client Breakdown\n`;
   for (const { client, revenue, analytics } of clients) {
     ctx += `### ${client.name} (${client.platform}${client.location ? ` · ${client.location}` : ""})\n`;
-    ctx += `- MTD Rev: $${revenue.mtd.toLocaleString()}`;
+    ctx += `- MTD Rev: ${safeMoney(revenue?.mtd)}`;
     if (revenue.mtdChange !== null) ctx += ` (${revenue.mtdChange > 0 ? "+" : ""}${revenue.mtdChange}% MoM)`;
-    ctx += `\n- YTD Rev: $${revenue.ytd.toLocaleString()}`;
+    ctx += `\n- YTD Rev: ${safeMoney(revenue?.ytd)}`;
     if (revenue.ytdChange !== null) ctx += ` (${revenue.ytdChange > 0 ? "+" : ""}${revenue.ytdChange}% YoY)`;
-    ctx += `\n- Leads: ${analytics.leads} | Ad Spend: $${analytics.adSpend.toLocaleString()} | CPL: $${analytics.costPerLead} | Sessions: ${analytics.sessions.toLocaleString()}\n`;
+    ctx += `\n- Leads: ${analytics?.leads ?? "—"} | Ad Spend: ${safeMoney(analytics?.adSpend)} | CPL: ${safeMoney(analytics?.costPerLead)} | Sessions: ${safeNum(analytics?.sessions)}\n`;
   }
 
   return ctx;
