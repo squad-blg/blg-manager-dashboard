@@ -184,12 +184,14 @@ export default function Dashboard() {
   });
 
   const { data: dashboard, isLoading, refetch, isFetching } = useQuery<DashboardData>({
-    queryKey: ["/api/dashboard", selectedManager],
-    queryFn: () =>
-      apiRequest(
-        "GET",
-        `/api/dashboard${selectedManager ? `?managerId=${selectedManager}` : ""}`
-      ).then((r) => r.json()),
+    queryKey: ["/api/dashboard", selectedManager, selectedPeriod],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (selectedManager) params.set("managerId", selectedManager);
+      if (selectedPeriod === "prior") params.set("period", priorMonthStr);
+      const qs = params.toString() ? `?${params}` : "";
+      return apiRequest("GET", `/api/dashboard${qs}`).then((r) => r.json());
+    },
   });
 
   const now = new Date();
