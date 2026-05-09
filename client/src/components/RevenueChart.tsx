@@ -173,6 +173,10 @@ export default function RevenueChart({ clients }: Props) {
   const gridStyle = { strokeDasharray: "3 3", stroke: "hsl(150,12%,17%)", vertical: false };
 
   const hasRevenue = combinedData.some(d => d.revenue != null && d.revenue > 0);
+  const chartYear = combinedData.length > 0
+    ? parseInt(combinedData[combinedData.length - 1].period.split("-")[0])
+    : new Date().getFullYear();
+  const priorYear = chartYear - 1;
   const maxSpend = Math.max(...combinedData.map(d => d.adSpend ?? 0));
   const maxRevenue = Math.max(...combinedData.map(d => d.revenue ?? 0));
 
@@ -272,25 +276,57 @@ export default function RevenueChart({ clients }: Props) {
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           {mode === "combined" ? (
-            <ComposedChart data={combinedData} margin={{ top: 5, right: showRoas ? 50 : 10, left: 0, bottom: 0 }}>
+            <ComposedChart
+              data={combinedData}
+              margin={{ top: 5, right: (showRoas || (!showYoy && showRevenue && showSpend)) ? 55 : 10, left: 0, bottom: 0 }}
+              barCategoryGap={showYoy ? "20%" : "30%"}
+              barGap={showYoy ? 2 : 4}
+            >
               <CartesianGrid {...gridStyle} />
               <XAxis dataKey="label" tick={axisTickStyle} axisLine={false} tickLine={false} />
-              <YAxis
-                yAxisId="spend"
-                tickFormatter={fmtCurrency}
-                tick={axisTickStyle}
-                axisLine={false}
-                tickLine={false}
-                width={55}
-                domain={[0, (() => {
-                  const m = Math.max(
-                    showSpend ? maxSpend : 0,
-                    showRevenue ? maxRevenue : 0
-                  );
-                  return m > 0 ? m * 1.15 : "auto";
-                })()]}
-              />
-              {showRoas && (
+
+              {/* YoY mode: single shared axis for both years side by side */}
+              {showYoy ? (
+                <YAxis
+                  yAxisId="spend"
+                  orientation="left"
+                  tickFormatter={fmtCurrency}
+                  tick={{ ...axisTickStyle, fill: COLOR_SPEND }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={55}
+                  domain={[0, Math.max(maxSpend, Math.max(...combinedData.map(d => d.adSpendPriorYear ?? 0))) * 1.15]}
+                />
+              ) : (
+                <>
+                  {/* Revenue Y axis left */}
+                  <YAxis
+                    yAxisId="revenue"
+                    orientation="left"
+                    tickFormatter={fmtCurrency}
+                    tick={{ ...axisTickStyle, fill: showRevenue ? COLOR_REVENUE : axisTickStyle.fill }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={55}
+                    hide={!showRevenue}
+                    domain={[0, maxRevenue > 0 ? maxRevenue * 1.15 : "auto"]}
+                  />
+                  {/* Spend Y axis right */}
+                  <YAxis
+                    yAxisId="spend"
+                    orientation={showRevenue ? "right" : "left"}
+                    tickFormatter={fmtCurrency}
+                    tick={{ ...axisTickStyle, fill: COLOR_SPEND }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={showRevenue ? 50 : 55}
+                    hide={!showSpend}
+                    domain={[0, maxSpend > 0 ? maxSpend * 1.15 : "auto"]}
+                  />
+                </>
+              )}
+
+              {showRoas && !showYoy && (
                 <YAxis
                   yAxisId="roas"
                   orientation="right"
@@ -301,51 +337,50 @@ export default function RevenueChart({ clients }: Props) {
                   width={45}
                 />
               )}
-              <Tooltip content={<CustomTooltip />} />
-              <Legend
-                wrapperStyle={{ fontSize: "11px", color: "hsl(140,8%,52%)", paddingTop: "10px" }}
-              />
 
-              {/* Prior year spend — subtle outline bars */}
+              <Tooltip content={<CustomTooltip />} />
+              <Legend wrapperStyle={{ fontSize: "11px", color: "hsl(140,8%,52%)", paddingTop: "10px" }} />
+
+              {/* YoY mode: prior year side by side with current year */}
               {showYoy && (
                 <Bar
                   yAxisId="spend"
                   dataKey="adSpendPriorYear"
-                  name="Spend (Prior Year)"
+                  name={`${priorYear} Spend`}
                   fill={COLOR_SPEND}
-                  fillOpacity={0.18}
+                  fillOpacity={0.35}
                   radius={[3, 3, 0, 0]}
-                  maxBarSize={32}
+                  maxBarSize={20}
                 />
               )}
 
-              {/* Revenue bars — amber, behind spend */}
-              {showRevenue && (
+              {/* Revenue bars — only in non-YoY mode */}
+              {!showYoy && showRevenue && (
                 <Bar
-                  yAxisId="spend"
+                  yAxisId="revenue"
                   dataKey="revenue"
                   name="Revenue"
                   fill={COLOR_REVENUE}
-                  fillOpacity={0.75}
+                  fillOpacity={0.85}
                   radius={[3, 3, 0, 0]}
                   maxBarSize={32}
                 />
               )}
 
-              {/* Ad spend bars — green, in front */}
+              {/* Current year spend */}
               {showSpend && (
                 <Bar
                   yAxisId="spend"
                   dataKey="adSpend"
-                  name="Ad Spend"
+                  name={showYoy ? `${chartYear} Spend` : "Ad Spend"}
                   fill={COLOR_SPEND}
                   radius={[3, 3, 0, 0]}
-                  maxBarSize={32}
+                  maxBarSize={showYoy ? 20 : 32}
                 />
               )}
 
-              {/* ROAS line */}
-              {showRoas && (
+              {/* ROAS line — only in non-YoY mode */}
+              {showRoas && !showYoy && (
                 <Line
                   yAxisId="roas"
                   type="monotone"
