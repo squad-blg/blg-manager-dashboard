@@ -1,14 +1,14 @@
 import {
-  AreaChart,
-  Area,
-  BarChart,
+  ComposedChart,
   Bar,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   Legend,
+  ReferenceLine,
 } from "recharts";
 import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
@@ -19,8 +19,10 @@ interface Props {
   clients: ClientSummary[];
 }
 
-const COLOR_PRIMARY = "hsl(93, 48%, 55%)";
-const CHART_COLORS = [
+const COLOR_SPEND   = "hsl(93, 48%, 50%)";
+const COLOR_REVENUE = "hsl(37, 91%, 55%)";
+const COLOR_ROAS    = "hsl(200, 80%, 60%)";
+const CHART_COLORS  = [
   "hsl(93, 48%, 55%)",
   "hsl(160, 55%, 42%)",
   "hsl(37, 91%, 55%)",
@@ -29,73 +31,132 @@ const CHART_COLORS = [
   "hsl(120, 40%, 45%)",
 ];
 
-type ChartMode = "combined" | "breakdown";
-type ChartType = "area" | "bar";
-
-function formatCurrency(v: number) {
+function fmtCurrency(v: number) {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
   return `$${v.toFixed(0)}`;
 }
 
-function shortMonth(period: string) {
-  const [y, m] = period.split("-");
-  const d = new Date(parseInt(y), parseInt(m) - 1, 1);
-  return d.toLocaleString("en-US", { month: "short", year: "2-digit" });
+function fmtCurrencyFull(v: number) {
+  return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// Build prior-year period string: "2026-05" → "2025-05"
+function shortMonth(period: string) {
+  const [y, m] = period.split("-");
+  return new Date(parseInt(y), parseInt(m) - 1, 1)
+    .toLocaleString("en-US", { month: "short", year: "2-digit" });
+}
+
 function priorYearPeriod(period: string) {
   const [y, m] = period.split("-");
   return `${parseInt(y) - 1}-${m}`;
 }
 
-export default function RevenueChart({ clients }: Props) {
-  const [mode, setMode] = useState<ChartMode>("combined");
-  const [chartType, setChartType] = useState<ChartType>("area");
-  const [showYoy, setShowYoy] = useState(true);
+function getCurrentPeriod() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
 
-  // ── Combined: aggregate adSpend per period + prior-year overlay ───────────
+// Custom tooltip
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: "hsl(150,16%,10%)",
+      border: "1px solid hsl(150,12%,20%)",
+      borderRadius: "8px",
+      padding: "10px 14px",
+      fontSize: "12px",
+      color: "hsl(140,15%,90%)",
+      minWidth: "160px",
+    }}>
+      <p style={{ color: "hsl(140,8%,60%)", marginBottom: "6px", fontWeight: 600 }}>{label}</p>
+      {payload.map((p: any) => (
+        <div key={p.dataKey} style={{ display: "flex", justifyContent: "space-between", gap: "16px", marginBottom: "3px" }}>
+          <span style={{ color: p.color, display: "flex", alignItems: "center", gap: "5px" }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color, display: "inline-block" }} />
+            {p.name}
+          </span>
+          <span style={{ fontWeight: 600 }}>
+            {p.dataKey === "roas" ? `${Number(p.value).toFixed(2)}x` : fmtCurrencyFull(p.value)}
+          </span>
+        </div>
+      ))}
+      {payload.find((p: any) => p.dataKey === "adSpend") && payload.find((p: any) => p.dataKey === "revenue") && (() => {
+        const spend = payload.find((p: any) => p.dataKey === "adSpend")?.value ?? 0;
+        const rev = payload.find((p: any) => p.dataKey === "revenue")?.value ?? 0;
+        if (spend > 0 && rev > 0) {
+          return (
+            <div style={{ borderTop: "1px solid hsl(150,12%,20%)", marginTop: "6px", paddingTop: "6px", display: "flex", justifyContent: "space-between" }}>
+              <span style={{ color: COLOR_ROAS }}>ROAS</span>
+              <span style={{ fontWeight: 600, color: COLOR_ROAS }}>{(rev / spend).toFixed(2)}x</span>
+            </div>
+          );
+        }
+        return null;
+      })()}
+    </div>
+  );
+};
+
+export default function RevenueChart({ clients }: Props) {
+  const [mode, setMode] = useState<"combined" | "breakdown">("combined");
+  const [showRevenue, setShowRevenue] = useState(true);
+  const [showRoas, setShowRoas] = useState(false);
+  const [showYoy, setShowYoy] = useState(false);
+
+  const currentPeriod = getCurrentPeriod();
+
+  // ── Combined data ─────────────────────────────────────────────────────────
   const combinedData = useMemo(() => {
     if (!clients.length) return [];
 
-    // All periods across all clients' analytics history
-    const periodMap = new Map<string, { adSpend: number; hasData: boolean }>();
+    const spendMap = new Map<string, number>();
+    const revenueMap = new Map<string, number>();
 
     clients.forEach((c) => {
+      // Ad spend from history
       (getAdMetrics(c).history ?? []).forEach((h) => {
-        const existing = periodMap.get(h.period) ?? { adSpend: 0, hasData: false };
-        periodMap.set(h.period, {
-          adSpend: existing.adSpend + (h.adSpend ?? 0),
-          hasData: true,
-        });
+        spendMap.set(h.period, (spendMap.get(h.period) ?? 0) + (h.adSpend ?? 0));
+      });
+      // Revenue from revenue history
+      (c.revenue?.history ?? []).forEach((r: any) => {
+        revenueMap.set(r.period, (revenueMap.get(r.period) ?? 0) + (r.revenue ?? 0));
       });
     });
 
-    const periods = Array.from(periodMap.keys()).sort().slice(-13);
+    // All periods with spend data, sorted, last 13 months, exclude current incomplete month
+    const periods = Array.from(spendMap.keys())
+      .filter(p => p !== currentPeriod) // hide incomplete current month
+      .sort()
+      .slice(-13);
 
     return periods.map((period) => {
-      const current = periodMap.get(period)?.adSpend ?? 0;
-      const prior = periodMap.get(priorYearPeriod(period))?.adSpend ?? null;
+      const spend = Math.round(spendMap.get(period) ?? 0);
+      const revenue = Math.round(revenueMap.get(period) ?? 0);
+      const priorSpend = spendMap.get(priorYearPeriod(period)) ?? null;
+      const roas = spend > 0 && revenue > 0 ? Math.round((revenue / spend) * 100) / 100 : null;
       return {
         period,
         label: shortMonth(period),
-        adSpend: Math.round(current),
-        adSpendPriorYear: prior != null ? Math.round(prior) : null,
+        adSpend: spend,
+        revenue: revenue > 0 ? revenue : null,
+        adSpendPriorYear: priorSpend != null ? Math.round(priorSpend) : null,
+        roas,
       };
     });
-  }, [clients]);
+  }, [clients, currentPeriod]);
 
   // ── Breakdown per client ──────────────────────────────────────────────────
   const breakdownData = useMemo(() => {
     if (!clients.length) return { data: [], keys: [] };
-
     const periodSet = new Set<string>();
     clients.forEach((c) =>
-(getAdMetrics(c).history ?? []).forEach((h) => periodSet.add(h.period))
+      (getAdMetrics(c).history ?? []).forEach((h) => {
+        if (h.period !== currentPeriod) periodSet.add(h.period);
+      })
     );
     const periods = Array.from(periodSet).sort().slice(-13);
-
     const data = periods.map((period) => {
       const row: Record<string, any> = { period, label: shortMonth(period) };
       clients.forEach((c) => {
@@ -104,54 +165,75 @@ export default function RevenueChart({ clients }: Props) {
       });
       return row;
     });
-
     return { data, keys: clients.map((c) => c.client.name) };
-  }, [clients]);
+  }, [clients, currentPeriod]);
 
-  const tooltipStyle = {
-    background: "hsl(150,16%,10%)",
-    border: "1px solid hsl(150,12%,17%)",
-    borderRadius: "6px",
-    color: "hsl(140,15%,90%)",
-    fontSize: "12px",
-  };
   const axisTickStyle = { fill: "hsl(140,8%,52%)", fontSize: 11 };
-  const tooltipFmt = (v: number, name: string) => [formatCurrency(v), name];
+  const gridStyle = { strokeDasharray: "3 3", stroke: "hsl(150,12%,17%)", vertical: false };
+
+  const hasRevenue = combinedData.some(d => d.revenue != null && d.revenue > 0);
+  const maxSpend = Math.max(...combinedData.map(d => d.adSpend ?? 0));
+  const maxRevenue = Math.max(...combinedData.map(d => d.revenue ?? 0));
 
   return (
     <Card className="bg-card border border-border rounded-lg p-5">
-      <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
+      {/* Header */}
+      <div className="flex items-start justify-between flex-wrap gap-3 mb-5">
         <div>
           <h2 className="text-sm font-semibold text-foreground">
-            Ad Spend Trend — Last 12 Months
+            Performance Trend — Last 13 Months
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             {mode === "combined"
-              ? showYoy
-                ? "Current year vs same month prior year (dashed)"
-                : "Aggregated ad spend across selected clients"
+              ? "Ad spend vs revenue by month (current month excluded — in progress)"
               : "Per-client ad spend breakdown"}
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Toggle overlays */}
           {mode === "combined" && (
-            <button
-              data-testid="chart-yoy-toggle"
-              onClick={() => setShowYoy((v) => !v)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
-                showYoy
-                  ? "bg-primary/15 border-primary/40 text-primary"
-                  : "border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
-              }`}
-            >
-              YoY overlay
-            </button>
+            <div className="flex gap-1.5">
+              {hasRevenue && (
+                <button
+                  onClick={() => setShowRevenue(v => !v)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                    showRevenue
+                      ? "border-amber-500/50 text-amber-400 bg-amber-500/10"
+                      : "border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
+                  }`}
+                >
+                  Revenue
+                </button>
+              )}
+              {hasRevenue && (
+                <button
+                  onClick={() => setShowRoas(v => !v)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                    showRoas
+                      ? "border-sky-500/50 text-sky-400 bg-sky-500/10"
+                      : "border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
+                  }`}
+                >
+                  ROAS line
+                </button>
+              )}
+              <button
+                onClick={() => setShowYoy(v => !v)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                  showYoy
+                    ? "bg-primary/15 border-primary/40 text-primary"
+                    : "border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
+                }`}
+              >
+                YoY
+              </button>
+            </div>
           )}
 
+          {/* Mode */}
           <div className="flex rounded-md overflow-hidden border border-border">
             <button
-              data-testid="chart-mode-combined"
               onClick={() => setMode("combined")}
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                 mode === "combined"
@@ -162,7 +244,6 @@ export default function RevenueChart({ clients }: Props) {
               Combined
             </button>
             <button
-              data-testid="chart-mode-breakdown"
               onClick={() => setMode("breakdown")}
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                 mode === "breakdown"
@@ -173,249 +254,157 @@ export default function RevenueChart({ clients }: Props) {
               By Client
             </button>
           </div>
-
-          <div className="flex rounded-md overflow-hidden border border-border">
-            <button
-              data-testid="chart-type-area"
-              onClick={() => setChartType("area")}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                chartType === "area"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-              }`}
-            >
-              Area
-            </button>
-            <button
-              data-testid="chart-type-bar"
-              onClick={() => setChartType("bar")}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                chartType === "bar"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-              }`}
-            >
-              Bar
-            </button>
-          </div>
         </div>
       </div>
 
-      <div className="h-64">
+      {/* Chart */}
+      <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           {mode === "combined" ? (
-            chartType === "area" ? (
-              <AreaChart
-                data={combinedData}
-                margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={COLOR_PRIMARY} stopOpacity={0.3} />
-                    <stop offset="95%" stopColor={COLOR_PRIMARY} stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="priorGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={COLOR_PRIMARY} stopOpacity={0.1} />
-                    <stop offset="95%" stopColor={COLOR_PRIMARY} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="hsl(150,12%,17%)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="label"
-                  tick={axisTickStyle}
-                  axisLine={false}
-                  tickLine={false}
-                />
+            <ComposedChart data={combinedData} margin={{ top: 5, right: showRoas ? 50 : 10, left: 0, bottom: 0 }}>
+              <CartesianGrid {...gridStyle} />
+              <XAxis dataKey="label" tick={axisTickStyle} axisLine={false} tickLine={false} />
+              <YAxis
+                yAxisId="spend"
+                tickFormatter={fmtCurrency}
+                tick={axisTickStyle}
+                axisLine={false}
+                tickLine={false}
+                width={55}
+                domain={[0, Math.max(maxSpend, maxRevenue) * 1.15]}
+              />
+              {showRoas && (
                 <YAxis
-                  tickFormatter={formatCurrency}
-                  tick={axisTickStyle}
+                  yAxisId="roas"
+                  orientation="right"
+                  tickFormatter={(v) => `${v}x`}
+                  tick={{ ...axisTickStyle, fill: COLOR_ROAS }}
                   axisLine={false}
                   tickLine={false}
-                  width={60}
+                  width={45}
                 />
-                <Tooltip
-                  formatter={tooltipFmt}
-                  contentStyle={tooltipStyle}
-                  labelStyle={{ color: "hsl(140,8%,52%)" }}
-                />
-                {showYoy && (
-                  <Legend
-                    wrapperStyle={{
-                      fontSize: "11px",
-                      color: "hsl(140,8%,52%)",
-                      paddingTop: "8px",
-                    }}
-                  />
-                )}
-                {showYoy && (
-                  <Area
-                    type="monotone"
-                    dataKey="adSpendPriorYear"
-                    name="Prior Year"
-                    connectNulls
-                    stroke={COLOR_PRIMARY}
-                    strokeWidth={1.5}
-                    strokeDasharray="4 3"
-                    strokeOpacity={0.4}
-                    fill="url(#priorGrad)"
-                    dot={false}
-                  />
-                )}
-                <Area
-                  type="monotone"
-                  dataKey="adSpend"
-                  name="This Year"
-                  connectNulls
-                  stroke={COLOR_PRIMARY}
-                  strokeWidth={2}
-                  fill="url(#spendGrad)"
-                  dot={false}
-                />
-              </AreaChart>
-            ) : (
-              <BarChart
-                data={combinedData}
-                margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
-              >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="hsl(150,12%,17%)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="label"
-                  tick={axisTickStyle}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tickFormatter={formatCurrency}
-                  tick={axisTickStyle}
-                  axisLine={false}
-                  tickLine={false}
-                  width={60}
-                />
-                <Tooltip
-                  formatter={tooltipFmt}
-                  contentStyle={tooltipStyle}
-                  labelStyle={{ color: "hsl(140,8%,52%)" }}
-                />
-                {showYoy && (
-                  <Legend
-                    wrapperStyle={{
-                      fontSize: "11px",
-                      color: "hsl(140,8%,52%)",
-                      paddingTop: "8px",
-                    }}
-                  />
-                )}
-                {showYoy && (
-                  <Bar
-                    dataKey="adSpendPriorYear"
-                    name="Prior Year"
-                    fill={COLOR_PRIMARY}
-                    fillOpacity={0.25}
-                    radius={[3, 3, 0, 0]}
-                  />
-                )}
+              )}
+              <Tooltip content={<CustomTooltip />} />
+              <Legend
+                wrapperStyle={{ fontSize: "11px", color: "hsl(140,8%,52%)", paddingTop: "10px" }}
+              />
+
+              {/* Prior year spend — subtle outline bars */}
+              {showYoy && (
                 <Bar
-                  dataKey="adSpend"
-                  name="This Year"
-                  fill={COLOR_PRIMARY}
+                  yAxisId="spend"
+                  dataKey="adSpendPriorYear"
+                  name="Spend (Prior Year)"
+                  fill={COLOR_SPEND}
+                  fillOpacity={0.18}
                   radius={[3, 3, 0, 0]}
+                  maxBarSize={32}
                 />
-              </BarChart>
-            )
-          ) : chartType === "area" ? (
-            <AreaChart
-              data={breakdownData.data}
-              margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="hsl(150,12%,17%)"
-                vertical={false}
+              )}
+
+              {/* Revenue bars — amber, behind spend */}
+              {showRevenue && (
+                <Bar
+                  yAxisId="spend"
+                  dataKey="revenue"
+                  name="Revenue"
+                  fill={COLOR_REVENUE}
+                  fillOpacity={0.75}
+                  radius={[3, 3, 0, 0]}
+                  maxBarSize={32}
+                />
+              )}
+
+              {/* Ad spend bars — green, in front */}
+              <Bar
+                yAxisId="spend"
+                dataKey="adSpend"
+                name="Ad Spend"
+                fill={COLOR_SPEND}
+                radius={[3, 3, 0, 0]}
+                maxBarSize={32}
               />
-              <XAxis
-                dataKey="label"
-                tick={axisTickStyle}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tickFormatter={formatCurrency}
-                tick={axisTickStyle}
-                axisLine={false}
-                tickLine={false}
-                width={60}
-              />
-              <Tooltip
-                formatter={(v: number, n: string) => [formatCurrency(v), n]}
-                contentStyle={{ ...tooltipStyle, fontSize: "11px" }}
-              />
-              <Legend
-                wrapperStyle={{ fontSize: "11px", color: "hsl(140,8%,52%)" }}
-              />
-              {breakdownData.keys.slice(0, 6).map((key, i) => (
-                <Area
-                  key={key}
+
+              {/* ROAS line */}
+              {showRoas && (
+                <Line
+                  yAxisId="roas"
                   type="monotone"
-                  dataKey={key}
-                  stroke={CHART_COLORS[i % CHART_COLORS.length]}
-                  strokeWidth={1.5}
-                  fill={CHART_COLORS[i % CHART_COLORS.length] + "22"}
-                  dot={false}
-                  stackId="a"
+                  dataKey="roas"
+                  name="ROAS"
+                  stroke={COLOR_ROAS}
+                  strokeWidth={2}
+                  dot={{ fill: COLOR_ROAS, r: 3 }}
+                  activeDot={{ r: 5 }}
+                  connectNulls
                 />
-              ))}
-            </AreaChart>
+              )}
+            </ComposedChart>
           ) : (
-            <BarChart
-              data={breakdownData.data}
-              margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="hsl(150,12%,17%)"
-                vertical={false}
-              />
-              <XAxis
-                dataKey="label"
-                tick={axisTickStyle}
-                axisLine={false}
-                tickLine={false}
-              />
+            <ComposedChart data={breakdownData.data} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+              <CartesianGrid {...gridStyle} />
+              <XAxis dataKey="label" tick={axisTickStyle} axisLine={false} tickLine={false} />
               <YAxis
-                tickFormatter={formatCurrency}
+                yAxisId="spend"
+                tickFormatter={fmtCurrency}
                 tick={axisTickStyle}
                 axisLine={false}
                 tickLine={false}
-                width={60}
+                width={55}
               />
               <Tooltip
-                formatter={(v: number, n: string) => [formatCurrency(v), n]}
-                contentStyle={{ ...tooltipStyle, fontSize: "11px" }}
+                formatter={(v: number, n: string) => [fmtCurrencyFull(v), n]}
+                contentStyle={{
+                  background: "hsl(150,16%,10%)",
+                  border: "1px solid hsl(150,12%,20%)",
+                  borderRadius: "8px",
+                  fontSize: "12px",
+                }}
               />
-              <Legend
-                wrapperStyle={{ fontSize: "11px", color: "hsl(140,8%,52%)" }}
-              />
+              <Legend wrapperStyle={{ fontSize: "11px", color: "hsl(140,8%,52%)", paddingTop: "10px" }} />
               {breakdownData.keys.slice(0, 6).map((key, i) => (
                 <Bar
                   key={key}
+                  yAxisId="spend"
                   dataKey={key}
                   fill={CHART_COLORS[i % CHART_COLORS.length]}
                   radius={[2, 2, 0, 0]}
                   stackId="a"
+                  maxBarSize={40}
                 />
               ))}
-            </BarChart>
+            </ComposedChart>
           )}
         </ResponsiveContainer>
       </div>
+
+      {/* Summary stats below chart */}
+      {mode === "combined" && combinedData.length > 0 && (() => {
+        const last3 = combinedData.slice(-3);
+        const avgSpend = last3.reduce((s, d) => s + d.adSpend, 0) / last3.length;
+        const avgRevenue = last3.filter(d => d.revenue).reduce((s, d) => s + (d.revenue ?? 0), 0) / last3.filter(d => d.revenue).length;
+        const avgRoas = avgSpend > 0 && avgRevenue > 0 ? avgRevenue / avgSpend : null;
+        return (
+          <div className="flex gap-6 mt-4 pt-4 border-t border-border">
+            <div>
+              <p className="text-xs text-muted-foreground">3-Month Avg Spend</p>
+              <p className="text-sm font-semibold text-foreground">{fmtCurrencyFull(avgSpend)}</p>
+            </div>
+            {avgRevenue > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground">3-Month Avg Revenue</p>
+                <p className="text-sm font-semibold text-foreground">{fmtCurrencyFull(avgRevenue)}</p>
+              </div>
+            )}
+            {avgRoas && (
+              <div>
+                <p className="text-xs text-muted-foreground">3-Month Avg ROAS</p>
+                <p className="text-sm font-semibold" style={{ color: COLOR_ROAS }}>{avgRoas.toFixed(2)}x</p>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </Card>
   );
 }
