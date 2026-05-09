@@ -170,7 +170,6 @@ export default function Dashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState<"current" | "prior">("current");
 
   // Compute period strings
-  const now = new Date();
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const priorMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const priorMonthStr = `${priorMonthDate.getFullYear()}-${String(priorMonthDate.getMonth() + 1).padStart(2, "0")}`;
@@ -194,7 +193,6 @@ export default function Dashboard() {
     },
   });
 
-  const now = new Date();
 
   // If a specific client is selected, filter down to just that client
   const visibleClients = selectedClient
