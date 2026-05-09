@@ -780,6 +780,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         revenue: {
           mtd: mtdRevenue,
           ytd: ytdRevenue,
+          history: monthlyRevenue
+            .filter(r => r.period.startsWith(String(cpYear)) || r.period.startsWith(String(cpYear - 1)))
+            .sort((a, b) => a.period.localeCompare(b.period))
+            .map(r => ({ period: r.period, revenue: r.revenue, orderCount: r.orderCount ?? 0 })),
         },
         health: {
           churnRisk,
