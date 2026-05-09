@@ -167,6 +167,16 @@ export type DashboardData = {
 export default function Dashboard() {
   const [selectedManager, setSelectedManager] = useState<string | null>(null);
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<"current" | "prior">("current");
+
+  // Compute period strings
+  const now = new Date();
+  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const priorMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const priorMonthStr = `${priorMonthDate.getFullYear()}-${String(priorMonthDate.getMonth() + 1).padStart(2, "0")}`;
+  const activePeriod = selectedPeriod === "current" ? currentMonthStr : priorMonthStr;
+  const currentMonthLabel = now.toLocaleString("en-US", { month: "long", year: "numeric" });
+  const priorMonthLabel = priorMonthDate.toLocaleString("en-US", { month: "long", year: "numeric" });
   const [chatOpen, setChatOpen] = useState(false);
 
   const { data: managers } = useQuery<Manager[]>({
@@ -183,7 +193,6 @@ export default function Dashboard() {
   });
 
   const now = new Date();
-  const monthLabel = now.toLocaleString("en-US", { month: "long", year: "numeric" });
 
   // If a specific client is selected, filter down to just that client
   const visibleClients = selectedClient
@@ -244,7 +253,22 @@ export default function Dashboard() {
                 ? `${managers?.find((m) => m.id === selectedManager)?.name}'s Clients`
                 : "All Clients — Overview"}
             </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">{monthLabel} · Live data</p>
+            <div className="flex items-center gap-2 mt-0.5">
+            <button
+              onClick={() => setSelectedPeriod("current")}
+              className={`text-xs px-2 py-0.5 rounded-full transition-colors ${selectedPeriod === "current" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {currentMonthLabel}
+            </button>
+            <span className="text-xs text-muted-foreground">·</span>
+            <button
+              onClick={() => setSelectedPeriod("prior")}
+              className={`text-xs px-2 py-0.5 rounded-full transition-colors ${selectedPeriod === "prior" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {priorMonthLabel}
+            </button>
+            {selectedPeriod === "prior" && <span className="text-xs text-amber-500 font-medium">Viewing prior month</span>}
+          </div>
           </div>
           <div className="flex gap-2">
             <Button
