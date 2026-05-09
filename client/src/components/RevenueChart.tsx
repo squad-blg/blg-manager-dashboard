@@ -47,11 +47,6 @@ function shortMonth(period: string) {
     .toLocaleString("en-US", { month: "short", year: "2-digit" });
 }
 
-function priorYearPeriod(period: string) {
-  const [y, m] = period.split("-");
-  return `${parseInt(y) - 1}-${m}`;
-}
-
 function getCurrentPeriod() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -104,7 +99,6 @@ export default function RevenueChart({ clients }: Props) {
   const [showSpend, setShowSpend] = useState(true);
   const [showRevenue, setShowRevenue] = useState(true);
   const [showRoas, setShowRoas] = useState(false);
-  const [showYoy, setShowYoy] = useState(false);
 
   const currentPeriod = getCurrentPeriod();
 
@@ -135,14 +129,12 @@ export default function RevenueChart({ clients }: Props) {
     return periods.map((period) => {
       const spend = Math.round(spendMap.get(period) ?? 0);
       const revenue = Math.round(revenueMap.get(period) ?? 0);
-      const priorSpend = spendMap.get(priorYearPeriod(period)) ?? null;
       const roas = spend > 0 && revenue > 0 ? Math.round((revenue / spend) * 100) / 100 : null;
       return {
         period,
         label: shortMonth(period),
         adSpend: spend,
         revenue: revenue > 0 ? revenue : null,
-        adSpendPriorYear: priorSpend != null ? Math.round(priorSpend) : null,
         roas,
       };
     });
@@ -173,10 +165,6 @@ export default function RevenueChart({ clients }: Props) {
   const gridStyle = { strokeDasharray: "3 3", stroke: "hsl(150,12%,17%)", vertical: false };
 
   const hasRevenue = combinedData.some(d => d.revenue != null && d.revenue > 0);
-  const chartYear = combinedData.length > 0
-    ? parseInt(combinedData[combinedData.length - 1].period.split("-")[0])
-    : new Date().getFullYear();
-  const priorYear = chartYear - 1;
   const maxSpend = Math.max(...combinedData.map(d => d.adSpend ?? 0));
   const maxRevenue = Math.max(...combinedData.map(d => d.revenue ?? 0));
 
@@ -233,16 +221,7 @@ export default function RevenueChart({ clients }: Props) {
                   ROAS line
                 </button>
               )}
-              <button
-                onClick={() => setShowYoy(v => !v)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
-                  showYoy
-                    ? "bg-primary/15 border-primary/40 text-primary"
-                    : "border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
-                }`}
-              >
-                YoY
-              </button>
+
             </div>
           )}
 
@@ -278,55 +257,37 @@ export default function RevenueChart({ clients }: Props) {
           {mode === "combined" ? (
             <ComposedChart
               data={combinedData}
-              margin={{ top: 5, right: (showRoas || (!showYoy && showRevenue && showSpend)) ? 55 : 10, left: 0, bottom: 0 }}
-              barCategoryGap={showYoy ? "20%" : "30%"}
-              barGap={showYoy ? 2 : 4}
+              margin={{ top: 5, right: (showRoas || (showRevenue && showSpend)) ? 55 : 10, left: 0, bottom: 0 }}
+              barCategoryGap="30%"
+              barGap={4}
             >
               <CartesianGrid {...gridStyle} />
               <XAxis dataKey="label" tick={axisTickStyle} axisLine={false} tickLine={false} />
-
-              {/* YoY mode: single shared axis for both years side by side */}
-              {showYoy ? (
-                <YAxis
-                  yAxisId="spend"
-                  orientation="left"
-                  tickFormatter={fmtCurrency}
-                  tick={{ ...axisTickStyle, fill: COLOR_SPEND }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={55}
-                  domain={[0, Math.max(maxSpend, Math.max(...combinedData.map(d => d.adSpendPriorYear ?? 0))) * 1.15]}
-                />
-              ) : (
-                <>
-                  {/* Revenue Y axis left */}
-                  <YAxis
-                    yAxisId="revenue"
-                    orientation="left"
-                    tickFormatter={fmtCurrency}
-                    tick={{ ...axisTickStyle, fill: showRevenue ? COLOR_REVENUE : axisTickStyle.fill }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={55}
-                    hide={!showRevenue}
-                    domain={[0, maxRevenue > 0 ? maxRevenue * 1.15 : "auto"]}
-                  />
-                  {/* Spend Y axis right */}
-                  <YAxis
-                    yAxisId="spend"
-                    orientation={showRevenue ? "right" : "left"}
-                    tickFormatter={fmtCurrency}
-                    tick={{ ...axisTickStyle, fill: COLOR_SPEND }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={showRevenue ? 50 : 55}
-                    hide={!showSpend}
-                    domain={[0, maxSpend > 0 ? maxSpend * 1.15 : "auto"]}
-                  />
-                </>
-              )}
-
-              {showRoas && !showYoy && (
+              {/* Revenue Y axis left */}
+              <YAxis
+                yAxisId="revenue"
+                orientation="left"
+                tickFormatter={fmtCurrency}
+                tick={{ ...axisTickStyle, fill: COLOR_REVENUE }}
+                axisLine={false}
+                tickLine={false}
+                width={55}
+                hide={!showRevenue}
+                domain={[0, maxRevenue > 0 ? maxRevenue * 1.15 : "auto"]}
+              />
+              {/* Spend Y axis right */}
+              <YAxis
+                yAxisId="spend"
+                orientation={showRevenue ? "right" : "left"}
+                tickFormatter={fmtCurrency}
+                tick={{ ...axisTickStyle, fill: COLOR_SPEND }}
+                axisLine={false}
+                tickLine={false}
+                width={showRevenue ? 50 : 55}
+                hide={!showSpend}
+                domain={[0, maxSpend > 0 ? maxSpend * 1.15 : "auto"]}
+              />
+              {showRoas && (
                 <YAxis
                   yAxisId="roas"
                   orientation="right"
@@ -337,25 +298,9 @@ export default function RevenueChart({ clients }: Props) {
                   width={45}
                 />
               )}
-
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ fontSize: "11px", color: "hsl(140,8%,52%)", paddingTop: "10px" }} />
-
-              {/* YoY mode: prior year side by side with current year */}
-              {showYoy && (
-                <Bar
-                  yAxisId="spend"
-                  dataKey="adSpendPriorYear"
-                  name={`${priorYear} Spend`}
-                  fill={COLOR_SPEND}
-                  fillOpacity={0.35}
-                  radius={[3, 3, 0, 0]}
-                  maxBarSize={20}
-                />
-              )}
-
-              {/* Revenue bars — only in non-YoY mode */}
-              {!showYoy && showRevenue && (
+              {showRevenue && (
                 <Bar
                   yAxisId="revenue"
                   dataKey="revenue"
@@ -366,21 +311,17 @@ export default function RevenueChart({ clients }: Props) {
                   maxBarSize={32}
                 />
               )}
-
-              {/* Current year spend */}
               {showSpend && (
                 <Bar
                   yAxisId="spend"
                   dataKey="adSpend"
-                  name={showYoy ? `${chartYear} Spend` : "Ad Spend"}
+                  name="Ad Spend"
                   fill={COLOR_SPEND}
                   radius={[3, 3, 0, 0]}
-                  maxBarSize={showYoy ? 20 : 32}
+                  maxBarSize={32}
                 />
               )}
-
-              {/* ROAS line — only in non-YoY mode */}
-              {showRoas && !showYoy && (
+              {showRoas && (
                 <Line
                   yAxisId="roas"
                   type="monotone"
