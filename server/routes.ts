@@ -660,23 +660,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── Dashboard aggregate (per manager or all) ───────────────────────────
   app.get("/api/dashboard", (req, res) => {
-    const { managerId } = req.query;
+    const { managerId, period: periodParam } = req.query;
     const clients = storage.getClients(managerId as string | undefined);
     const now = new Date();
 
-    // Period helpers
-    const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    // MoM: same month, prior month
+    // Period helpers — support ?period=YYYY-MM to view any month
+    const currentPeriod = (periodParam as string) ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const [cpYear, cpMonth] = currentPeriod.split("-").map(Number);
+
+    // MoM: prior month relative to selected period
     const momPeriod = (() => {
-      const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const d = new Date(cpYear, cpMonth - 2, 1);
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     })();
     // YoY: same month last year
-    const yoyPeriod = `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    // YTD: Jan–current month this year
-    const ytdPrefixCurrent = String(now.getFullYear());
-    // YTD prior: Jan–current month last year
-    const ytdPrefixPrior = String(now.getFullYear() - 1);
+    const yoyPeriod = `${cpYear - 1}-${String(cpMonth).padStart(2, "0")}`;
+    // YTD: Jan–selected month this year
+    const ytdPrefixCurrent = String(cpYear);
+    // YTD prior: Jan–selected month last year
+    const ytdPrefixPrior = String(cpYear - 1);
 
     const pct = (a?: number | null, b?: number | null): number | null => {
       if (a == null || b == null || b === 0) return null;
@@ -705,6 +707,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const ytdSpendPrior = analytics
         .filter(a => a.period.startsWith(ytdPrefixPrior) && a.period <= yoyPeriod)
         .reduce((s, a) => s + (a.adSpend ?? 0), 0);
+      // Note: ytdRevenue also scoped to selected period below
       const ytdChange = pct(ytdSpendCurrent, ytdSpendPrior);
 
       // ── Revenue (context only, no trends) ─────────────────────────────────
