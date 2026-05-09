@@ -101,6 +101,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export default function RevenueChart({ clients }: Props) {
   const [mode, setMode] = useState<"combined" | "breakdown">("combined");
+  const [showSpend, setShowSpend] = useState(true);
   const [showRevenue, setShowRevenue] = useState(true);
   const [showRoas, setShowRoas] = useState(false);
   const [showYoy, setShowYoy] = useState(false);
@@ -181,7 +182,7 @@ export default function RevenueChart({ clients }: Props) {
       <div className="flex items-start justify-between flex-wrap gap-3 mb-5">
         <div>
           <h2 className="text-sm font-semibold text-foreground">
-            Performance Trend — Last 13 Months
+            Performance Trend — Last 12 Months
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             {mode === "combined"
@@ -194,6 +195,16 @@ export default function RevenueChart({ clients }: Props) {
           {/* Toggle overlays */}
           {mode === "combined" && (
             <div className="flex gap-1.5">
+              <button
+                  onClick={() => setShowSpend(v => !v)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                    showSpend
+                      ? "border-primary/50 text-primary bg-primary/10"
+                      : "border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
+                  }`}
+                >
+                  Ad Spend
+                </button>
               {hasRevenue && (
                 <button
                   onClick={() => setShowRevenue(v => !v)}
@@ -271,7 +282,13 @@ export default function RevenueChart({ clients }: Props) {
                 axisLine={false}
                 tickLine={false}
                 width={55}
-                domain={[0, Math.max(maxSpend, maxRevenue) * 1.15]}
+                domain={[0, (() => {
+                  const m = Math.max(
+                    showSpend ? maxSpend : 0,
+                    showRevenue ? maxRevenue : 0
+                  );
+                  return m > 0 ? m * 1.15 : "auto";
+                })()]}
               />
               {showRoas && (
                 <YAxis
@@ -316,14 +333,16 @@ export default function RevenueChart({ clients }: Props) {
               )}
 
               {/* Ad spend bars — green, in front */}
-              <Bar
-                yAxisId="spend"
-                dataKey="adSpend"
-                name="Ad Spend"
-                fill={COLOR_SPEND}
-                radius={[3, 3, 0, 0]}
-                maxBarSize={32}
-              />
+              {showSpend && (
+                <Bar
+                  yAxisId="spend"
+                  dataKey="adSpend"
+                  name="Ad Spend"
+                  fill={COLOR_SPEND}
+                  radius={[3, 3, 0, 0]}
+                  maxBarSize={32}
+                />
+              )}
 
               {/* ROAS line */}
               {showRoas && (
