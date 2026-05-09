@@ -67,7 +67,7 @@ export default function AiChat({
         query,
         managerId: selectedManager,
         managerName,
-        dashboardData,
+        dashboardData: dashboardData ? JSON.parse(JSON.stringify(dashboardData, (k, v) => v === undefined ? null : v)) : null,
       });
       if (!res.ok) {
         const err = await res.json();
@@ -279,8 +279,8 @@ export default function AiChat({
             onKeyDown={handleKeyDown}
             placeholder="Ask about your clients, trends, or performance..."
             rows={1}
-            className="flex-1 resize-none bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 text-sm text-foreground placeholder:text-muted-foreground p-1 min-h-0"
-            style={{ boxShadow: "none" }}
+            className="flex-1 resize-none bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 text-sm placeholder:text-muted-foreground p-1 min-h-0"
+            style={{ boxShadow: "none", color: "hsl(140, 15%, 90%)" }}
             data-testid="input-chat"
           />
           <Button
@@ -358,10 +358,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         )}
 
         <p className="text-xs text-muted-foreground px-1">
-          {new Date(message.createdAt).toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+          {message.createdAt ? new Date(message.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
         </p>
       </div>
     </div>
