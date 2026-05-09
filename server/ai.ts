@@ -99,6 +99,14 @@ export function getAllChunks() {
   return all;
 }
 
+// ─── Safe number formatters ─────────────────────────────────────────────────
+function safeNum(v: any, prefix = "", suffix = ""): string {
+  const n = parseFloat(v);
+  if (v == null || isNaN(n)) return "—";
+  return `${prefix}${n.toLocaleString()}${suffix}`;
+}
+function safeMoney(v: any): string { return safeNum(v, "$"); }
+
 // ─── Build context summary from dashboard data ───────────────────────────────
 
 export function buildDataContext(dashboardData: any, managerName?: string): string {
