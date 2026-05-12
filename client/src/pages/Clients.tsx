@@ -41,15 +41,18 @@ type Client = {
   metaAdAccountId: string | null;
   location: string | null;
   active: boolean | null;
+  sheetsSpreadsheetId: string | null;
+  sheetsCell: string | null;
 };
 
-const PLATFORMS = ["ERS", "IO", "ECOMM", "LEADGEN"];
+const PLATFORMS = ["ERS", "IO", "ECOMM", "LEADGEN", "SHEETS"];
 
 const PLATFORM_LABELS: Record<string, string> = {
   ERS: "Event Rental Systems",
   IO: "Inflatable Office",
   ECOMM: "E-Commerce",
   LEADGEN: "Lead Generation",
+  SHEETS: "Google Sheets",
 };
 
 export default function ClientsPage() {
@@ -72,6 +75,8 @@ export default function ClientsPage() {
     ga4PropertyId: "",
     metaAdAccountId: "",
     location: "",
+    sheetsSpreadsheetId: "",
+    sheetsCell: "",
   });
 
   const { data: managers } = useQuery<Manager[]>({ queryKey: ["/api/managers"] });
@@ -129,6 +134,8 @@ export default function ClientsPage() {
       ga4PropertyId: "",
       metaAdAccountId: "",
       location: "",
+      sheetsSpreadsheetId: "",
+      sheetsCell: "",
     });
     setShowDialog(true);
   }
@@ -150,6 +157,8 @@ export default function ClientsPage() {
       ga4PropertyId: client.ga4PropertyId ?? "",
       metaAdAccountId: client.metaAdAccountId ?? "",
       location: client.location ?? "",
+      sheetsSpreadsheetId: client.sheetsSpreadsheetId ?? "",
+      sheetsCell: client.sheetsCell ?? "",
     });
     setShowDialog(true);
   }
@@ -168,6 +177,8 @@ export default function ClientsPage() {
       ga4PropertyId: form.ga4PropertyId || null,
       metaAdAccountId: form.metaAdAccountId || null,
       location: form.location || null,
+      sheetsSpreadsheetId: form.sheetsSpreadsheetId || null,
+      sheetsCell: form.sheetsCell || null,
       active: true,
     };
     if (editingClient) {
@@ -420,6 +431,30 @@ export default function ClientsPage() {
                   className="bg-secondary border-border"
                 />
               </div>
+            )}
+            {form.platform === "SHEETS" && (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Google Sheets — Spreadsheet ID</Label>
+                  <Input
+                    value={form.sheetsSpreadsheetId}
+                    onChange={(e) => setForm({ ...form, sheetsSpreadsheetId: e.target.value })}
+                    placeholder="From the Google Sheets URL"
+                    className="bg-secondary border-border font-mono text-xs"
+                  />
+                  <p className="text-xs text-muted-foreground">Found in the URL: /spreadsheets/d/<strong>ID</strong>/edit</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Cell Reference</Label>
+                  <Input
+                    value={form.sheetsCell}
+                    onChange={(e) => setForm({ ...form, sheetsCell: e.target.value })}
+                    placeholder="e.g. PODS 2.0!V1"
+                    className="bg-secondary border-border font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">Include the tab name, e.g. <strong>PODS 2.0!V1</strong></p>
+                </div>
+              </>
             )}
             {/* Google Ads + GA4 */}
             <div className="pt-1 border-t border-border">
