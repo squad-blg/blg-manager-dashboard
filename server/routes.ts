@@ -12,6 +12,7 @@ import { fetchMetaAdsMetrics, refreshMetaToken } from "./connectors/meta";
 import { fetchERSMetrics } from "./connectors/ers";
 import { fetchSheetsRevenue } from "./connectors/googlesheets";
 import { fetchIOMetrics } from "./connectors/io";
+import { fetchIOMetrics } from "./connectors/io";
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -235,6 +236,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const fetchedAt = new Date().toISOString();
 
           try {
+            // IO — Inflatable Office
+            if (client.platform === "IO") {
+              if (client.ioApiKey) {
+                try {
+                  const m2 = await fetchIOMetrics(client.ioApiKey, startDate, endDate);
+                  storage.upsertRevenueSnapshot({ clientId: client.id, period, periodType: "month", revenue: m2.revenue, orderCount: m2.totalEvents, fetchedAt });
+                  console.log(`[rebackfill] ${client.name} IO ${period}: $${m2.revenue} (${m2.totalEvents} events)`);
+                } catch (e: any) { console.error(`[rebackfill] ${client.name} IO ${period}:`, e.message); }
+              }
+            }
+
             // ERS — always use full month end date
             if (client.platform === "ERS" && client.ersFolder && client.ersApiKey && client.ersDevKey) {
               try {
@@ -251,7 +263,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   googleAccessToken, client.googleAdsCustomerId,
                   mccId?.key ?? client.googleAdsCustomerId, startDate, endDate
                 );
-                const hasOwnRevenuePlatform = ["ERS", "IO", "SHEETS"].includes(client.platform);
+                const hasOwnRevenuePlatform = ["ERS", "IO", "SHEETS"].includes(client.platform); // IO = InflatableOffice
                 if (!hasOwnRevenuePlatform) {
                   storage.upsertRevenueSnapshot({ clientId: client.id, period, periodType: "month", revenue: ads.revenue, orderCount: ads.conversions, fetchedAt });
                 }
