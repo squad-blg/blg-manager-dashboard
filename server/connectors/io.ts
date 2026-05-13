@@ -62,11 +62,13 @@ export async function fetchIOMetrics(
   const startTs = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000).toString();
   const endTs   = Math.floor(new Date(`${endDate}T23:59:59Z`).getTime() / 1000).toString();
 
-  // IO stats endpoint: GET with JSON body for date range
-  // The API documentation explicitly shows a JSON body on a GET request.
-  const res = await axios.get(`${resolvedBase}/api6/stats`, {
+  // IO stats endpoint: the docs show a JSON body with start/end timestamps.
+  // axios.get() silently drops the body, so use axios.request() with method:'get'
+  // to force the JSON body through on a GET request.
+  const res = await axios.request({
+    method: "get",
+    url: `${resolvedBase}/api6/stats`,
     params: { apiKey },
-    // axios supports `data` on GET — this sends the JSON body
     data: { start: startTs, end: endTs },
     headers: { "Content-Type": "application/json" },
     timeout: 20_000,
