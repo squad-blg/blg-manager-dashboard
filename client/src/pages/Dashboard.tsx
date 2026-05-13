@@ -359,7 +359,7 @@ function formatCurrency(v: number) {
 }
 
 function StatChange({ change, label }: { change: number | null | undefined; label: string }) {
-  if (change == null)
+  if (change == null || isNaN(change))
     return <span className="text-xs text-muted-foreground">— {label}</span>;
   const up = change > 0;
   const down = change < 0;
@@ -556,10 +556,10 @@ function HealthSummaryCards({
             value={
               totalAdSpend > 0 ? (
                 formatCurrency(totalAdSpend)
-              ) : missingFor("adSpend").length > 0 ? (
+              ) : missingFor("adSpend").length > 0 && dashboard.clients.every(c => Object.keys(c.missingCredentials ?? {}).some(k => k.includes("google") || k.includes("meta"))) ? (
                 <NaTooltip reasons={missingFor("adSpend")} />
               ) : (
-                <span className="text-muted-foreground">—</span>
+                <span className="text-muted-foreground">$0.00</span>
               )
             }
             sub={
