@@ -12,7 +12,6 @@ import { fetchMetaAdsMetrics, refreshMetaToken } from "./connectors/meta";
 import { fetchERSMetrics } from "./connectors/ers";
 import { fetchSheetsRevenue } from "./connectors/googlesheets";
 import { fetchIOMetrics } from "./connectors/io";
-import { fetchIOMetrics } from "./connectors/io";
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -110,11 +109,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             }
 
             // IO
-            if (client.platform === "IO" && client.ioAccountId && client.ioApiKey) {
-              try {
-                const m2 = await fetchIOMetrics(client.ioAccountId, client.ioApiKey, startDate, endDate);
-                storage.upsertRevenueSnapshot({ clientId: client.id, period, periodType: "month", revenue: m2.revenue, orderCount: m2.orderCount, fetchedAt });
-              } catch (e: any) { console.error(`[backfill] ${client.name} IO ${period}:`, e.message); }
+            if (client.platform === "IO") {
+              if (client.ioApiKey) {
+                try {
+                  const m2 = await fetchIOMetrics(client.ioApiKey, startDate, endDate);
+                  storage.upsertRevenueSnapshot({ clientId: client.id, period, periodType: "month", revenue: m2.revenue, orderCount: m2.totalEvents, fetchedAt });
+                  console.log(`[backfill] ${client.name} IO ${period}: $${m2.revenue} (${m2.totalEvents} events)`);
+                } catch (e: any) { console.error(`[backfill] ${client.name} IO ${period}:`, e.message); }
+              }
             }
 
             // Google Ads + GA4
@@ -509,9 +511,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }
 
           // ── IO ─────────────────────────────────────────────────────────
-          if (client.platform === "IO" && client.ioAccountId && client.ioApiKey) {
-            const m = await fetchIOMetrics(client.ioAccountId, client.ioApiKey, startDate, endDate);
-            storage.upsertRevenueSnapshot({ clientId: client.id, period: targetPeriod, periodType: "month", revenue: m.revenue, orderCount: m.orderCount, fetchedAt });
+          if (client.platform === "IO") {
+            if (!client.ioApiKey) {
+              console.warn(`[sync] ${client.name} is IO but missing ioApiKey — skipping`);
+            } else {
+              try {
+                const m = await fetchIOMetrics(client.ioApiKey, startDate, ersEndDate);
+                storage.upsertRevenueSnapshot({ clientId: client.id, period: targetPeriod, periodType: "month", revenue: m.revenue, orderCount: m.totalEvents, fetchedAt });
+                console.log(`[sync] ${client.name} IO: events=${m.totalEvents} revenue=$${m.revenue}`);
+              } catch (e: any) { console.error(`[sync] ${client.name} IO:`, e.message); }
+            }
           }
 
           // ── Google Ads + GA4 ───────────────────────────────────────────
