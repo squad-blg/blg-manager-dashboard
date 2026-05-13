@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, asc } from "drizzle-orm";
 import * as schema from "../shared/schema";
 
 // Store DB in /app/data on Railway (persisted via volume), fallback to local for dev
@@ -39,7 +39,9 @@ sqlite.exec(`
     location TEXT,
     active INTEGER DEFAULT 1,
     last_touch_date TEXT,
-    last_touch_note TEXT
+    last_touch_note TEXT,
+    sheets_spreadsheet_id TEXT,
+    sheets_cell TEXT
   );
 
   CREATE TABLE IF NOT EXISTS revenue_snapshots (
@@ -114,6 +116,8 @@ const migrations = [
   `ALTER TABLE clients ADD COLUMN ga4_property_id TEXT`,
   `ALTER TABLE clients ADD COLUMN meta_ad_account_id TEXT`,
   `ALTER TABLE clients ADD COLUMN ers_dev_key TEXT`,
+  `ALTER TABLE clients ADD COLUMN sheets_spreadsheet_id TEXT`,
+  `ALTER TABLE clients ADD COLUMN sheets_cell TEXT`,
   `ALTER TABLE analytics_snapshots ADD COLUMN google_ad_spend REAL`,
   `ALTER TABLE analytics_snapshots ADD COLUMN meta_ad_spend REAL`,
 ];
@@ -179,9 +183,9 @@ export class Storage implements IStorage {
 
   getClients(managerId?: string): schema.Client[] {
     if (managerId) {
-      return db.select().from(schema.clients).where(eq(schema.clients.managerId, managerId)).all();
+      return db.select().from(schema.clients).where(eq(schema.clients.managerId, managerId)).orderBy(asc(schema.clients.name)).all();
     }
-    return db.select().from(schema.clients).all();
+    return db.select().from(schema.clients).orderBy(asc(schema.clients.name)).all();
   }
 
   getClient(id: string): schema.Client | undefined {
