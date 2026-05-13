@@ -67,7 +67,7 @@ function todayISO() {
 }
 
 function TrendBadge({ change }: { change: number | null | undefined }) {
-  if (change == null)
+  if (change == null || isNaN(change))
     return <span className="text-muted-foreground text-xs">—</span>;
   if (change > 5)
     return (
