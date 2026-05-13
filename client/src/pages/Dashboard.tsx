@@ -93,6 +93,7 @@ export type ClientSummary = {
     lastTouchNote: string | null;
     lastTouchDaysAgo: number | null;
   };
+  missingCredentials?: Record<string, string>;
 };
 
 /** Normalise whichever shape the server sends, computing YoY/YTD from history */
@@ -442,6 +443,32 @@ function ClientSelector({
   );
 }
 
+// ─── N/A Tooltip ─────────────────────────────────────────────────────────────
+// Shows "N/A" with a hover tooltip explaining which credentials are missing.
+function NaTooltip({ reasons }: { reasons: string[] }) {
+  const [show, setShow] = useState(false);
+  if (reasons.length === 0) return <span className="text-muted-foreground">—</span>;
+  return (
+    <span
+      className="relative inline-block cursor-help"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      <span className="text-muted-foreground/70 text-sm">N/A</span>
+      {show && (
+        <span className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-popover border border-border rounded-lg shadow-lg p-3 text-xs text-popover-foreground">
+          <span className="font-semibold block mb-1">Missing credentials:</span>
+          {reasons.map((r, i) => (
+            <span key={i} className="block text-muted-foreground leading-relaxed">• {r}</span>
+          ))}
+          <span className="block mt-1.5 text-primary/80 font-medium">Configure in Clients page</span>
+          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px w-2 h-2 bg-popover border-b border-r border-border rotate-45" />
+        </span>
+      )}
+    </span>
+  );
+}
+
 // ─── Health Summary Cards ─────────────────────────────────────────────────────
 
 function HealthSummaryCards({
@@ -465,6 +492,32 @@ function HealthSummaryCards({
     portfolioMtdRoas,
     clientCount,
   } = dashboard.totals;
+
+  // Collect missing credentials across visible clients for contextual N/A
+  const allMissing = dashboard.clients.reduce<Record<string, Set<string>>>((acc, c) => {
+    const m = c.missingCredentials ?? {};
+    if (m.googleAdsCustomerId || m.googleOAuth) {
+      if (!acc.adSpend) acc.adSpend = new Set();
+      acc.adSpend.add(m.googleAdsCustomerId ?? m.googleOAuth!);
+    }
+    if (m.metaAdAccountId || m.metaToken) {
+      if (!acc.adSpend) acc.adSpend = new Set();
+      acc.adSpend.add(m.metaAdAccountId ?? m.metaToken!);
+      if (!acc.leads) acc.leads = new Set();
+      acc.leads.add(m.metaAdAccountId ?? m.metaToken!);
+    }
+    if (m.ga4PropertyId) {
+      if (!acc.sessions) acc.sessions = new Set();
+      acc.sessions.add(m.ga4PropertyId);
+    }
+    if (m.ersFolder || m.ersApiKey || m.ersDevKey || m.ioApiKey) {
+      if (!acc.revenue) acc.revenue = new Set();
+      Object.values(m).forEach(v => { if (v) acc.revenue!.add(v); });
+    }
+    return acc;
+  }, {});
+
+  const missingFor = (key: string) => Array.from(allMissing[key] ?? []);
 
   // Aggregate YoY and YTD from getAdMetrics (computed from history client-side)
   const portfolioMetrics = dashboard.clients.reduce(
@@ -503,6 +556,8 @@ function HealthSummaryCards({
             value={
               totalAdSpend > 0 ? (
                 formatCurrency(totalAdSpend)
+              ) : missingFor("adSpend").length > 0 ? (
+                <NaTooltip reasons={missingFor("adSpend")} />
               ) : (
                 <span className="text-muted-foreground">—</span>
               )
@@ -521,6 +576,8 @@ function HealthSummaryCards({
             value={
               portfolioMetrics.ytdSpend > 0 ? (
                 formatCurrency(portfolioMetrics.ytdSpend)
+              ) : missingFor("adSpend").length > 0 ? (
+                <NaTooltip reasons={missingFor("adSpend")} />
               ) : (
                 <span className="text-muted-foreground">—</span>
               )
@@ -587,6 +644,8 @@ function HealthSummaryCards({
             value={
               totalLeads > 0 ? (
                 totalLeads.toLocaleString()
+              ) : missingFor("leads").length > 0 ? (
+                <NaTooltip reasons={missingFor("leads")} />
               ) : (
                 <span className="text-muted-foreground">—</span>
               )
@@ -599,6 +658,8 @@ function HealthSummaryCards({
             value={
               totalSessions > 0 ? (
                 totalSessions.toLocaleString()
+              ) : missingFor("sessions").length > 0 ? (
+                <NaTooltip reasons={missingFor("sessions")} />
               ) : (
                 <span className="text-muted-foreground">—</span>
               )
@@ -611,6 +672,8 @@ function HealthSummaryCards({
             value={
               mtdRevenue > 0 ? (
                 formatCurrency(mtdRevenue)
+              ) : missingFor("revenue").length > 0 ? (
+                <NaTooltip reasons={missingFor("revenue")} />
               ) : (
                 <span className="text-muted-foreground">—</span>
               )
@@ -623,6 +686,8 @@ function HealthSummaryCards({
             value={
               ytdRevenue > 0 ? (
                 formatCurrency(ytdRevenue)
+              ) : missingFor("revenue").length > 0 ? (
+                <NaTooltip reasons={missingFor("revenue")} />
               ) : (
                 <span className="text-muted-foreground">—</span>
               )
