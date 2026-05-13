@@ -777,6 +777,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           };
         });
 
+      // ── Missing credentials detection ─────────────────────────────────────
+      const creds = storage.getCredentials();
+      const hasGlobalGoogle = !!creds.find(c => c.service === "google_oauth");
+      const hasGlobalMeta   = !!creds.find(c => c.service === "meta_token");
+
+      const missing: Record<string, string> = {};
+
+      // ERS credentials
+      if (client.platform === "ERS") {
+        if (!client.ersFolder)  missing.ersFolder  = "ERS Folder Name";
+        if (!client.ersApiKey)  missing.ersApiKey   = "ERS API Token";
+        if (!client.ersDevKey)  missing.ersDevKey   = "ERS Developer API Key";
+      }
+      // IO credentials
+      if (client.platform === "IO") {
+        if (!client.ioApiKey)   missing.ioApiKey    = "IO API Key";
+      }
+      // Google Ads
+      if (!client.googleAdsCustomerId) {
+        missing.googleAdsCustomerId = "Google Ads Customer ID";
+      } else if (!hasGlobalGoogle) {
+        missing.googleOAuth = "Google OAuth (configure in Settings)";
+      }
+      // GA4
+      if (!client.ga4PropertyId) {
+        missing.ga4PropertyId = "GA4 Property ID";
+      }
+      // Meta
+      if (!client.metaAdAccountId) {
+        missing.metaAdAccountId = "Meta Ad Account ID";
+      } else if (!hasGlobalMeta) {
+        missing.metaToken = "Meta Access Token (configure in Settings)";
+      }
+      // Agency Analytics
+      if (!client.aaaCampaignId) {
+        missing.aaaCampaignId = "Agency Analytics Campaign ID";
+      }
+
       return {
         client,
         ads: {
@@ -812,6 +850,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           lastTouchNote: client.lastTouchNote ?? null,
           lastTouchDaysAgo,
         },
+        missingCredentials: missing,
       };
     });
 
