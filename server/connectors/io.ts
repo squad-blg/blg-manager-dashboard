@@ -37,10 +37,13 @@ export async function fetchIOMetrics(
   console.log(`[io] Fetching stats ${startDate} → ${endDate} (${start} → ${end})`);
 
   try {
-    const res = await axios.get(`${BASE_URL}/stats`, {
-      params: { apiKey, start: String(start), end: String(end) },
-      timeout: 20_000,
-    });
+    // IO API requires POST with JSON body for /stats endpoint
+    // apiKey goes as query param, date range as JSON body
+    const res = await axios.post(
+      `${BASE_URL}/stats?apiKey=${encodeURIComponent(apiKey)}`,
+      { start: String(start), end: String(end) },
+      { headers: { "Content-Type": "application/json" }, timeout: 20_000 }
+    );
 
     const data = res.data;
     console.log(`[io] Stats response keys:`, Object.keys(data ?? {}));
