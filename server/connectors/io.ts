@@ -1,87 +1,68 @@
 /**
  * Inflatable Office (IO) connector
  *
- * API reference: https://rental.software/support/knowledge-base/?cat=api
+ * Uses GET /api6/stats with Unix timestamp date range to fetch revenue.
  *
- * Primary endpoint: GET /api6/leads  (stats endpoint requires add-on subscription)
- *   - Auth: apiKey as query-string param
- *   - Date filter: eventstarttime_start / eventstarttime_end as Unix timestamps
- *   - Revenue: sum of `total` field across all leads in the date range
- *   - Pagination: offset/limit, page through all results
+ * Base URL: https://rental.software/api6
+ * Auth: ?apiKey=YOUR_KEY (query parameter)
+ * Revenue field: "Total Sales" (formatted as "$3,238.67")
  *
- * All IO accounts share https://rental.software — ioAccountId is not used.
- * ioApiKey is the only per-client credential needed.
- *
- * Rate limit: 300 calls / 300 seconds per key.
+ * API docs: https://rental.software/support/knowledge-base/article/api-stats-retrieve-list
  */
 
 import axios from "axios";
 
 export interface IOMetrics {
-  revenue: number;    // sum of lead `total` fields in the date range
-  orderCount: number; // number of leads (events) in the date range
-  leadCount: number;  // same as orderCount for IO (leads = events)
+  revenue: number;
+  totalEvents: number;
+  totalLeads: number;
 }
 
-const BASE_URL = "https://rental.software";
-const PAGE_SIZE = 100;
+const BASE_URL = "https://rental.software/api6";
 
 /**
- * Fetch all leads for a date range and compute revenue + count.
- * Pages through results automatically (100 per page).
- *
- * @param _baseUrl   Ignored — all IO accounts use rental.software
- * @param apiKey     IO API key from Admin → Settings → API Keys
- * @param startDate  YYYY-MM-DD
- * @param endDate    YYYY-MM-DD
+ * @param apiKey    IO API key from Settings → API Keys
+ * @param startDate YYYY-MM-DD
+ * @param endDate   YYYY-MM-DD
  */
 export async function fetchIOMetrics(
-  _baseUrl: string,
   apiKey: string,
   startDate: string,
   endDate: string
 ): Promise<IOMetrics> {
-  // Convert YYYY-MM-DD → Unix timestamps
-  const startTs = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000);
-  const endTs   = Math.floor(new Date(`${endDate}T23:59:59Z`).getTime() / 1000);
+  // Convert YYYY-MM-DD to Unix timestamps
+  const start = Math.floor(new Date(startDate + "T00:00:00Z").getTime() / 1000);
+  const end = Math.floor(new Date(endDate + "T23:59:59Z").getTime() / 1000);
 
-  let offset = 0;
-  let totalRevenue = 0;
-  let totalCount = 0;
-  let hasMore = true;
+  console.log(`[io] Fetching stats ${startDate} → ${endDate} (${start} → ${end})`);
 
-  while (hasMore) {
-    const res = await axios.get(`${BASE_URL}/api6/leads`, {
-      params: {
-        apiKey,
-        limit: PAGE_SIZE,
-        offset,
-        eventstarttime_start: startTs,
-        eventstarttime_end: endTs,
-      },
+  try {
+    // IO API requires GET with query params (despite docs showing POST example)
+    const res = await axios.get(`${BASE_URL}/stats`, {
+      params: { apiKey, start: String(start), end: String(end) },
       timeout: 20_000,
     });
 
-    const items: any[] = Array.isArray(res.data?.items) ? res.data.items : [];
+    const data = res.data;
+    console.log(`[io] Stats response keys:`, Object.keys(data ?? {}));
+    console.log(`[io] Raw response:`, JSON.stringify(data).slice(0, 400));
 
-    for (const lead of items) {
-      const amount = parseFloat(lead.total ?? "0") || 0;
-      totalRevenue += amount;
-    }
+    // "Total Sales" comes back as "$3,238.67" — strip formatting
+    const rawSales = data?.["Total Sales"] ?? data?.["total_sales"] ?? "0";
+    const revenue = parseFloat(String(rawSales).replace(/[^0-9.-]/g, ""));
 
-    totalCount += items.length;
+    const totalEvents = parseInt(String(data?.["Total Events"] ?? "0").replace(/[^0-9]/g, ""), 10);
+    const totalLeads = parseInt(String(data?.["Total Leads"] ?? "0").replace(/[^0-9]/g, ""), 10);
 
-    // Stop if we got fewer items than a full page — no more results
-    if (items.length < PAGE_SIZE) {
-      hasMore = false;
-    } else {
-      offset += PAGE_SIZE;
-    }
+    console.log(`[io] revenue=$${revenue} events=${totalEvents} leads=${totalLeads}`);
+
+    return {
+      revenue: isNaN(revenue) ? 0 : Math.round(revenue * 100) / 100,
+      totalEvents: isNaN(totalEvents) ? 0 : totalEvents,
+      totalLeads: isNaN(totalLeads) ? 0 : totalLeads,
+    };
+  } catch (e: any) {
+    console.error(`[io] Stats fetch failed:`, e.message, e.response?.data ?? "");
+    return { revenue: 0, totalEvents: 0, totalLeads: 0 };
   }
-
-  return {
-    revenue: Math.round(totalRevenue * 100) / 100,
-    orderCount: totalCount,
-    leadCount: totalCount,
-  };
 }
