@@ -8,8 +8,7 @@
  * Leads:  GET /api6/leads?apiKey=XXXX  with pagination query params
  *
  * Per-client config stored in the clients table:
- *   ioAccountId — the client's IO base URL (e.g. "https://yourcompany.rental.software")
- *                 Falls back to IO_API_BASE_URL env var if not set.
+ *   ioAccountId — not used (all IO accounts share https://rental.software)
  *   ioApiKey    — the API key from IO Admin → Settings → API Keys
  *
  * Rate limit: 300 calls / 300 seconds per key.
@@ -57,11 +56,7 @@ export async function fetchIOMetrics(
   startDate: string,
   endDate: string
 ): Promise<IOMetrics> {
-  const resolvedBase = (baseUrl ?? process.env.IO_API_BASE_URL ?? "").replace(/\/$/, "");
-
-  if (!resolvedBase) {
-    throw new Error("IO base URL not configured — set ioAccountId on the client or IO_API_BASE_URL env var");
-  }
+  const resolvedBase = "https://rental.software";
 
   // Convert YYYY-MM-DD → Unix timestamp (start of day UTC)
   const startTs = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000).toString();
@@ -97,8 +92,7 @@ export async function fetchIOLeadCount(
   startDate: string,
   endDate: string
 ): Promise<number> {
-  const resolvedBase = (baseUrl ?? process.env.IO_API_BASE_URL ?? "").replace(/\/$/, "");
-  if (!resolvedBase) return 0;
+  const resolvedBase = "https://rental.software";
 
   const startTs = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000).toString();
   const endTs   = Math.floor(new Date(`${endDate}T23:59:59Z`).getTime() / 1000).toString();
