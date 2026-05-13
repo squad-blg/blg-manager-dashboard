@@ -154,13 +154,19 @@ export type DashboardData = {
     ytdRevenue: number;
     ytdRevenueChange: number | null;
     totalLeads: number;
-    totalAdSpend: number;
-    totalAdSpendPrior: number;
-    totalAdSpendChange: number | null;
+    mtdSpend: number;
+    momChange: number | null;
+    yoyChange: number | null;
+    ytdSpend: number;
+    ytdChange: number | null;
     totalSessions: number;
     portfolioMtdRoas: number | null;
     portfolioYtdRoas: number | null;
     clientCount: number;
+    // Client-side overrides (when filtering to a single client)
+    totalAdSpend?: number;
+    totalAdSpendPrior?: number;
+    totalAdSpendChange?: number | null;
   };
   clients: ClientSummary[];
 };
@@ -483,8 +489,6 @@ function HealthSummaryCards({
   declining: number;
 }) {
   const {
-    totalAdSpend,
-    totalAdSpendChange,
     totalLeads,
     totalSessions,
     mtdRevenue,
@@ -492,6 +496,10 @@ function HealthSummaryCards({
     portfolioMtdRoas,
     clientCount,
   } = dashboard.totals;
+
+  // Use client-side overrides when filtering, otherwise server values
+  const totalAdSpend = dashboard.totals.totalAdSpend ?? dashboard.totals.mtdSpend ?? 0;
+  const totalAdSpendChange = dashboard.totals.totalAdSpendChange ?? dashboard.totals.momChange ?? null;
 
   // Collect missing credentials across visible clients for contextual N/A
   const allMissing = dashboard.clients.reduce<Record<string, Set<string>>>((acc, c) => {
