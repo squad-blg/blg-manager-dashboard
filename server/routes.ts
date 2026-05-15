@@ -367,12 +367,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!client || client.platform !== "IO") {
       return res.status(400).json({ error: "Not an IO client" });
     }
-    if (!client.ioAccountId || !client.ioApiKey) {
-      return res.status(400).json({ error: "IO account ID and API key not configured" });
+    if (!client.ioApiKey) {
+      return res.status(400).json({ error: "IO API key not configured" });
     }
     try {
       const { startDate, endDate } = req.body;
-      const metrics = await fetchIOMetrics(client.ioAccountId, client.ioApiKey, startDate, endDate);
+      const metrics = await fetchIOMetrics(client.ioApiKey, startDate, endDate);
       res.json(metrics);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
