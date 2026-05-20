@@ -15,7 +15,7 @@ export type InsertManager = z.infer<typeof insertManagerSchema>;
 export type Manager = typeof managers.$inferSelect;
 
 // Platform types
-export type PlatformType = "ERS" | "IO" | "ECOMM" | "LEADGEN";
+export type PlatformType = "ERS" | "IO" | "ECOMM" | "LEADGEN" | "SHEETS";
 
 // Clients
 export const clients = sqliteTable("clients", {
@@ -28,7 +28,8 @@ export const clients = sqliteTable("clients", {
   ersDevKey: text("ers_dev_key"),   // ERS Developer API Key (from Admin > API Keys)
   ioAccountId: text("io_account_id"),
   ioApiKey: text("io_api_key"),
-  aaaCampaignId: text("aaa_campaign_id"), // Agency Analytics campaign ID
+  aaaCampaignId: text("aaa_campaign_id"), // Agency Analytics campaign ID (legacy)
+  agencyAnalyticsUrl: text("agency_analytics_url"), // Agency Analytics dashboard link
   ecommPlatform: text("ecomm_platform"), // shopify | woocommerce | etc
   // Google Ads + GA4
   googleAdsCustomerId: text("google_ads_customer_id"), // 10-digit customer ID, digits only
@@ -39,6 +40,9 @@ export const clients = sqliteTable("clients", {
   active: integer("active", { mode: "boolean" }).default(true),
   lastTouchDate: text("last_touch_date"), // ISO date string YYYY-MM-DD
   lastTouchNote: text("last_touch_note"), // optional note about the touch
+  // Google Sheets revenue source
+  sheetsSpreadsheetId: text("sheets_spreadsheet_id"), // Google Sheets document ID
+  sheetsCell: text("sheets_cell"),                     // A1 notation e.g. "Summary!V1"
 });
 
 export const insertClientSchema = createInsertSchema(clients).omit({ id: true });
