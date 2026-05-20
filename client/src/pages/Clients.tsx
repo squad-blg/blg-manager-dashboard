@@ -35,6 +35,7 @@ type Client = {
   ioAccountId: string | null;
   ioApiKey: string | null;
   aaaCampaignId: string | null;
+  agencyAnalyticsUrl: string | null;
   ecommPlatform: string | null;
   googleAdsCustomerId: string | null;
   ga4PropertyId: string | null;
@@ -55,35 +56,6 @@ const PLATFORM_LABELS: Record<string, string> = {
   SHEETS: "Google Sheets",
 };
 
-// Integration status badge — green check when connected, amber warning when missing
-function IntBadge({ label, ok, missing }: { label: string; ok: boolean; missing: string[] }) {
-  const [show, setShow] = useState(false);
-  return (
-    <span
-      className="relative"
-      onMouseEnter={() => !ok && setShow(true)}
-      onMouseLeave={() => setShow(false)}
-    >
-      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-        ok
-          ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-          : "bg-amber-500/10 text-amber-500 border border-amber-500/20 cursor-help"
-      }`}>
-        {ok ? "✓" : "!"} {label}
-      </span>
-      {show && missing.length > 0 && (
-        <span className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-40 bg-popover border border-border rounded-lg shadow-lg p-2 text-xs text-popover-foreground whitespace-normal">
-          <span className="font-semibold block mb-0.5">Missing:</span>
-          {missing.map((m, i) => (
-            <span key={i} className="block text-muted-foreground">• {m}</span>
-          ))}
-          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px w-2 h-2 bg-popover border-b border-r border-border rotate-45" />
-        </span>
-      )}
-    </span>
-  );
-}
-
 export default function ClientsPage() {
   const { toast } = useToast();
   const [selectedManager, setSelectedManager] = useState<string | null>(null);
@@ -99,6 +71,7 @@ export default function ClientsPage() {
     ioAccountId: "",
     ioApiKey: "",
     aaaCampaignId: "",
+    agencyAnalyticsUrl: "",
     ecommPlatform: "",
     googleAdsCustomerId: "",
     ga4PropertyId: "",
@@ -155,7 +128,6 @@ export default function ClientsPage() {
       platform: "ERS",
       ersFolder: "",
       ersApiKey: "",
-      ersDevKey: "",
       ioAccountId: "",
       ioApiKey: "",
       aaaCampaignId: "",
@@ -182,6 +154,7 @@ export default function ClientsPage() {
       ioAccountId: client.ioAccountId ?? "",
       ioApiKey: client.ioApiKey ?? "",
       aaaCampaignId: client.aaaCampaignId ?? "",
+      agencyAnalyticsUrl: client.agencyAnalyticsUrl ?? "",
       ecommPlatform: client.ecommPlatform ?? "",
       googleAdsCustomerId: client.googleAdsCustomerId ?? "",
       ga4PropertyId: client.ga4PropertyId ?? "",
@@ -202,6 +175,7 @@ export default function ClientsPage() {
       ioAccountId: form.ioAccountId || null,
       ioApiKey: form.ioApiKey || null,
       aaaCampaignId: form.aaaCampaignId || null,
+      agencyAnalyticsUrl: form.agencyAnalyticsUrl || null,
       ecommPlatform: form.ecommPlatform || null,
       googleAdsCustomerId: form.googleAdsCustomerId || null,
       ga4PropertyId: form.ga4PropertyId || null,
@@ -318,22 +292,6 @@ export default function ClientsPage() {
                       AA Campaign: {client.aaaCampaignId}
                     </p>
                   )}
-                  {/* Integration status badges */}
-                  <div className="flex flex-wrap gap-1.5 mt-3 pt-2 border-t border-border/50">
-                    {client.platform === "ERS" && (
-                      <IntBadge label="ERS" ok={!!(client.ersFolder && client.ersApiKey && client.ersDevKey)} missing={[
-                        !client.ersFolder && "Folder",
-                        !client.ersApiKey && "API Token",
-                        !client.ersDevKey && "Dev Key",
-                      ].filter(Boolean) as string[]} />
-                    )}
-                    {client.platform === "IO" && (
-                      <IntBadge label="IO" ok={!!client.ioApiKey} missing={[!client.ioApiKey && "API Key"].filter(Boolean) as string[]} />
-                    )}
-                    <IntBadge label="Google Ads" ok={!!client.googleAdsCustomerId} missing={[!client.googleAdsCustomerId && "Customer ID"].filter(Boolean) as string[]} />
-                    <IntBadge label="GA4" ok={!!client.ga4PropertyId} missing={[!client.ga4PropertyId && "Property ID"].filter(Boolean) as string[]} />
-                    <IntBadge label="Meta" ok={!!client.metaAdAccountId} missing={[!client.metaAdAccountId && "Ad Account ID"].filter(Boolean) as string[]} />
-                  </div>
                 </Card>
               );
             })}
