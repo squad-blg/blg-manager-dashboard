@@ -15,30 +15,6 @@ import { apiRequest } from "@/lib/queryClient";
 import type { ClientSummary, Manager } from "@/pages/Dashboard";
 import { getAdMetrics } from "@/pages/Dashboard";
 
-// Inline N/A tooltip for missing credentials
-function NaCell({ reasons }: { reasons: string[] }) {
-  const [show, setShow] = useState(false);
-  if (reasons.length === 0) return <span className="text-muted-foreground text-sm">—</span>;
-  return (
-    <span
-      className="relative inline-block cursor-help"
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-    >
-      <span className="text-muted-foreground/70 text-xs">N/A</span>
-      {show && (
-        <span className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-popover border border-border rounded-lg shadow-lg p-2.5 text-xs text-popover-foreground whitespace-normal">
-          <span className="font-semibold block mb-1">Missing:</span>
-          {reasons.map((r, i) => (
-            <span key={i} className="block text-muted-foreground leading-relaxed">• {r}</span>
-          ))}
-          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px w-2 h-2 bg-popover border-b border-r border-border rotate-45" />
-        </span>
-      )}
-    </span>
-  );
-}
-
 interface Props {
   clients: ClientSummary[];
   managers: Manager[];
@@ -67,7 +43,7 @@ function todayISO() {
 }
 
 function TrendBadge({ change }: { change: number | null | undefined }) {
-  if (change == null || isNaN(change))
+  if (change == null)
     return <span className="text-muted-foreground text-xs">—</span>;
   if (change > 5)
     return (
@@ -413,12 +389,6 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
               const mgr = getManager(client.managerId);
               const mgrColor =
                 MANAGER_COLORS[client.managerId] ?? mgr?.color ?? "#6366f1";
-              const mc = row.missingCredentials ?? {};
-
-              // Build per-metric missing reasons
-              const spendMissing = [mc.googleAdsCustomerId, mc.googleOAuth, mc.metaAdAccountId, mc.metaToken].filter(Boolean) as string[];
-              const revenueMissing = [mc.ersFolder, mc.ersApiKey, mc.ersDevKey, mc.ioApiKey].filter(Boolean) as string[];
-              const sessionsMissing = [mc.ga4PropertyId].filter(Boolean) as string[];
 
               // YTD spend: sum history for current year
 
@@ -432,7 +402,19 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                   <td className="px-4 py-3">
                     <div>
                       <div className="font-medium text-foreground text-sm">
-                        {client.name}
+                        {client.agencyAnalyticsUrl ? (
+                          <a
+                            href={client.agencyAnalyticsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-primary hover:underline transition-colors"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {client.name}
+                          </a>
+                        ) : (
+                          client.name
+                        )}
                       </div>
                       {client.location && (
                         <div className="text-xs text-muted-foreground">
@@ -464,8 +446,6 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
                     {(analytics?.adSpend ?? 0) > 0 ? (
                       formatCurrency(analytics.adSpend)
-                    ) : spendMissing.length > 0 ? (
-                      <NaCell reasons={spendMissing} />
                     ) : (
                       <span className="text-muted-foreground text-sm">—</span>
                     )}
@@ -485,8 +465,6 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
                     {(analytics.ytdSpend ?? 0) > 0 ? (
                       formatCurrency(analytics.ytdSpend!)
-                    ) : spendMissing.length > 0 ? (
-                      <NaCell reasons={spendMissing} />
                     ) : (
                       <span className="text-muted-foreground text-sm">—</span>
                     )}
@@ -496,8 +474,6 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                   <td className="px-4 py-3 tabular-nums text-muted-foreground">
                     {(revenue?.mtd ?? 0) > 0 ? (
                       formatCurrency(revenue.mtd)
-                    ) : revenueMissing.length > 0 ? (
-                      <NaCell reasons={revenueMissing} />
                     ) : (
                       <span className="text-sm">—</span>
                     )}
@@ -509,8 +485,6 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                       <span className="font-semibold text-emerald-500">
                         {analytics.mtdRoas.toFixed(2)}x
                       </span>
-                    ) : (spendMissing.length > 0 || revenueMissing.length > 0) ? (
-                      <NaCell reasons={[...spendMissing, ...revenueMissing]} />
                     ) : (
                       <span className="text-muted-foreground text-xs">—</span>
                     )}
