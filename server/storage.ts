@@ -120,6 +120,7 @@ const migrations = [
   `ALTER TABLE clients ADD COLUMN sheets_cell TEXT`,
   `ALTER TABLE analytics_snapshots ADD COLUMN google_ad_spend REAL`,
   `ALTER TABLE analytics_snapshots ADD COLUMN meta_ad_spend REAL`,
+  `ALTER TABLE clients ADD COLUMN agency_analytics_url TEXT`,
 ];
 for (const sql of migrations) {
   try { sqlite.exec(sql); } catch { /* column already exists */ }
