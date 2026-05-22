@@ -212,15 +212,19 @@ function toVertical(platform: string): Vertical {
   return VALID_VERTICALS.has(p) ? (p as Vertical) : "ERS";
 }
 
-function EstimatedCell({ row }: { row: ClientSummary }) {
-  const [show, setShow] = useState(false);
+function useEstimatedBreakdown(row: ClientSummary) {
   const metrics = getAdMetrics(row);
-  const breakdown = estimateRevenue({
+  return estimateRevenue({
     paidClicks: (metrics as any).clicks ?? 0,
     seoSessions: metrics.sessions ?? 0,
     paidLeads: metrics.leads ?? 0,
     vertical: toVertical(row.client.platform),
   });
+}
+
+function EstimatedCell({ row }: { row: ClientSummary }) {
+  const [show, setShow] = useState(false);
+  const breakdown = useEstimatedBreakdown(row);
 
   return (
     <span
@@ -241,6 +245,39 @@ function EstimatedCell({ row }: { row: ClientSummary }) {
           </span>
           <span className="block text-muted-foreground border-t border-border pt-1.5">
             Connect CRM in the Clients page to see real revenue.
+          </span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+function EstimatedRoasCell({ row }: { row: ClientSummary }) {
+  const [show, setShow] = useState(false);
+  const breakdown = useEstimatedBreakdown(row);
+  const adSpend = getAdMetrics(row).adSpend ?? 0;
+  if (adSpend <= 0) return <span className="text-muted-foreground text-xs">—</span>;
+  const roas = Math.round((breakdown.estimatedRevenue / adSpend) * 100) / 100;
+
+  return (
+    <span
+      className="relative inline-flex items-center gap-1 cursor-help"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      data-testid="cell-estimated-roas"
+    >
+      <Sparkles className="w-3 h-3 text-amber-500 shrink-0" />
+      <span className="text-amber-600 dark:text-amber-400 font-semibold tabular-nums">
+        ~{roas.toFixed(2)}x
+      </span>
+      {show && (
+        <span className="absolute z-50 bottom-full left-0 mb-2 w-64 bg-popover border border-border rounded-lg shadow-lg p-3 text-xs text-popover-foreground whitespace-normal">
+          <span className="font-semibold block mb-1">Estimated ROAS</span>
+          <span className="block text-muted-foreground leading-relaxed mb-2">
+            ~{formatCurrency(breakdown.estimatedRevenue)} estimated revenue ÷ {formatCurrency(adSpend)} ad spend
+          </span>
+          <span className="block text-muted-foreground border-t border-border pt-1.5">
+            Connect CRM for real revenue data.
           </span>
         </span>
       )}
@@ -528,12 +565,14 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                     )}
                   </td>
 
-                  {/* ROAS */}
+                  {/* ROAS — real or estimated */}
                   <td className="px-4 py-3 tabular-nums">
                     {analytics?.mtdRoas != null ? (
                       <span className="font-semibold text-emerald-500">
                         {analytics.mtdRoas.toFixed(2)}x
                       </span>
+                    ) : !isCrmConnected(row) ? (
+                      <EstimatedRoasCell row={row} />
                     ) : (
                       <span className="text-muted-foreground text-xs">—</span>
                     )}

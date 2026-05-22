@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EstimatedRevenueCard } from "@/components/EstimatedRevenueCard";
 import { isCrmConnected } from "@/lib/crmStatus";
-import type { Vertical } from "@/lib/revenueEstimator";
+import { estimateRevenue, type Vertical } from "@/lib/revenueEstimator";
 
 export type Manager = {
   id: string;
@@ -507,9 +507,26 @@ function HealthSummaryCards({
     dashboard.clients.length > 0 &&
     dashboard.clients.every((c) => !isCrmConnected(c));
 
+  // MTD traffic — from getAdMetrics() for the current period
   const estPaidClicks  = dashboard.clients.reduce((s, c) => s + ((getAdMetrics(c) as any).clicks  ?? 0), 0);
   const estSeoSessions = dashboard.clients.reduce((s, c) => s + (getAdMetrics(c).sessions ?? 0), 0);
   const estPaidLeads   = dashboard.clients.reduce((s, c) => s + (getAdMetrics(c).leads    ?? 0), 0);
+
+  // YTD traffic — sum sessions/clicks/leads across all history entries in the current year
+  const _ytdYear = String(new Date().getFullYear());
+  const _ytdMax  = `${_ytdYear}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+  const estYtdPaidClicks = dashboard.clients.reduce((s, c) =>
+    s + (getAdMetrics(c).history ?? [])
+      .filter(h => h.period.startsWith(_ytdYear) && h.period <= _ytdMax)
+      .reduce((hs, h) => hs + (h.clicks   ?? 0), 0), 0);
+  const estYtdSeoSessions = dashboard.clients.reduce((s, c) =>
+    s + (getAdMetrics(c).history ?? [])
+      .filter(h => h.period.startsWith(_ytdYear) && h.period <= _ytdMax)
+      .reduce((hs, h) => hs + (h.sessions ?? 0), 0), 0);
+  const estYtdPaidLeads = dashboard.clients.reduce((s, c) =>
+    s + (getAdMetrics(c).history ?? [])
+      .filter(h => h.period.startsWith(_ytdYear) && h.period <= _ytdMax)
+      .reduce((hs, h) => hs + (h.leads    ?? 0), 0), 0);
 
   // Use the most-common platform as the vertical; fall back to ERS.
   const VALID_VERTICALS = new Set<string>(["ERS", "IO", "ECOMM", "LEADGEN"]);
@@ -527,6 +544,15 @@ function HealthSummaryCards({
   // Use client-side overrides when filtering, otherwise server values
   const totalAdSpend = dashboard.totals.totalAdSpend ?? dashboard.totals.mtdSpend ?? 0;
   const totalAdSpendChange = dashboard.totals.totalAdSpendChange ?? dashboard.totals.momChange ?? null;
+
+  // Estimated MTD revenue as a plain number — used for ROAS calculation below
+  const estMtdRevenue = allClientsLackCrm
+    ? estimateRevenue({ paidClicks: estPaidClicks, seoSessions: estSeoSessions, paidLeads: estPaidLeads, vertical: estVertical }).estimatedRevenue
+    : 0;
+  // Estimated MTD ROAS — only meaningful when there is real ad spend to divide by
+  const estMtdRoas = allClientsLackCrm && totalAdSpend > 0
+    ? Math.round((estMtdRevenue / totalAdSpend) * 100) / 100
+    : null;
 
   // Collect missing credentials across visible clients for contextual N/A
   const allMissing = dashboard.clients.reduce<Record<string, Set<string>>>((acc, c) => {
@@ -648,23 +674,40 @@ function HealthSummaryCards({
             }
           />
 
-          <KpiCard
-            label="MTD ROAS"
-            value={
-              portfolioMtdRoas != null ? (
-                `${portfolioMtdRoas.toFixed(2)}x`
-              ) : (
-                <span className="text-muted-foreground">—</span>
-              )
-            }
-            sub={
-              <span className="text-xs text-muted-foreground">
-                {portfolioMtdRoas != null
-                  ? `$${portfolioMtdRoas.toFixed(2)} revenue per $1 spent`
-                  : "Awaiting revenue data"}
-              </span>
-            }
-          />
+          {allClientsLackCrm && estMtdRoas != null ? (
+            <KpiCard
+              label="MTD ROAS"
+              value={
+                <span className="inline-flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span className="text-amber-600 dark:text-amber-400">~{estMtdRoas.toFixed(2)}x</span>
+                </span>
+              }
+              sub={
+                <span className="text-xs text-muted-foreground">
+                  ~${estMtdRoas.toFixed(2)} estimated revenue per $1 spent
+                </span>
+              }
+            />
+          ) : (
+            <KpiCard
+              label="MTD ROAS"
+              value={
+                portfolioMtdRoas != null ? (
+                  `${portfolioMtdRoas.toFixed(2)}x`
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )
+              }
+              sub={
+                <span className="text-xs text-muted-foreground">
+                  {portfolioMtdRoas != null
+                    ? `$${portfolioMtdRoas.toFixed(2)} revenue per $1 spent`
+                    : "Awaiting revenue data"}
+                </span>
+              }
+            />
+          )}
         </div>
       </div>
 
@@ -729,9 +772,9 @@ function HealthSummaryCards({
           {allClientsLackCrm ? (
             <EstimatedRevenueCard
               label="Revenue YTD"
-              paidClicks={estPaidClicks}
-              seoSessions={estSeoSessions}
-              paidLeads={estPaidLeads}
+              paidClicks={estYtdPaidClicks}
+              seoSessions={estYtdSeoSessions}
+              paidLeads={estYtdPaidLeads}
               vertical={estVertical}
             />
           ) : (
