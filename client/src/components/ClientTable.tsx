@@ -15,7 +15,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { ClientSummary, Manager } from "@/pages/Dashboard";
 import { getAdMetrics } from "@/pages/Dashboard";
-import { isCrmConnected } from "@/lib/crmStatus";
 import { estimateRevenue, type Vertical } from "@/lib/revenueEstimator";
 
 interface Props {
@@ -554,27 +553,23 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                     )}
                   </td>
 
-                  {/* Revenue MTD — real, estimated, or blank */}
+                  {/* Revenue MTD — real if CRM returned it, estimated otherwise */}
                   <td className="px-4 py-3 tabular-nums text-muted-foreground">
                     {(revenue?.mtd ?? 0) > 0 ? (
                       formatCurrency(revenue.mtd)
-                    ) : !isCrmConnected(row) ? (
-                      <EstimatedCell row={row} />
                     ) : (
-                      <span className="text-sm">—</span>
+                      <EstimatedCell row={row} />
                     )}
                   </td>
 
-                  {/* ROAS — real or estimated */}
+                  {/* ROAS — real if CRM returned it, estimated otherwise */}
                   <td className="px-4 py-3 tabular-nums">
                     {analytics?.mtdRoas != null ? (
                       <span className="font-semibold text-emerald-500">
                         {analytics.mtdRoas.toFixed(2)}x
                       </span>
-                    ) : !isCrmConnected(row) ? (
-                      <EstimatedRoasCell row={row} />
                     ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
+                      <EstimatedRoasCell row={row} />
                     )}
                   </td>
 

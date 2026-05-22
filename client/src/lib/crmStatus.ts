@@ -34,14 +34,14 @@ export function isCrmConnected(c: ClientLike): boolean {
 /**
  * Decide which revenue treatment to render.
  *
- *   "real"      -> show the measured number from c.revenue
- *   "estimated" -> use the proxy formula (CRM never connected)
- *   "empty"     -> CRM connected but no revenue in the period (legitimate zero)
+ *   "real"      -> CRM has returned a non-zero revenue figure — show it.
+ *   "estimated" -> Revenue is zero for the period, regardless of whether the
+ *                  CRM is connected or not. Always show the proxy estimate so
+ *                  the dashboard is never blank for an onboarding client.
  */
-export function revenueDisplayMode(c: ClientLike): "real" | "estimated" | "empty" {
-  if (!isCrmConnected(c)) return "estimated";
+export function revenueDisplayMode(c: ClientLike): "real" | "estimated" {
   const mtd = c.revenue?.mtd ?? 0;
   const ytd = c.revenue?.ytd ?? 0;
   if (mtd > 0 || ytd > 0) return "real";
-  return "empty";
+  return "estimated";
 }
