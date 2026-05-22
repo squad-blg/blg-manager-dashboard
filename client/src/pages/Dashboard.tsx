@@ -9,6 +9,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshCw, Sparkles, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { EstimatedRevenueCard } from "@/components/EstimatedRevenueCard";
+import { isCrmConnected } from "@/lib/crmStatus";
+import type { Vertical } from "@/lib/revenueEstimator";
 
 export type Manager = {
   id: string;
@@ -497,6 +500,30 @@ function HealthSummaryCards({
     clientCount,
   } = dashboard.totals;
 
+  // ── Estimated-revenue fallback inputs ────────────────────────────────────────
+  // Only show the estimated card when EVERY visible client has no CRM connected.
+  // Mixed portfolios (some real, some missing) keep the existing NaTooltip path.
+  const allClientsLackCrm =
+    dashboard.clients.length > 0 &&
+    dashboard.clients.every((c) => !isCrmConnected(c));
+
+  const estPaidClicks  = dashboard.clients.reduce((s, c) => s + ((getAdMetrics(c) as any).clicks  ?? 0), 0);
+  const estSeoSessions = dashboard.clients.reduce((s, c) => s + (getAdMetrics(c).sessions ?? 0), 0);
+  const estPaidLeads   = dashboard.clients.reduce((s, c) => s + (getAdMetrics(c).leads    ?? 0), 0);
+
+  // Use the most-common platform as the vertical; fall back to ERS.
+  const VALID_VERTICALS = new Set<string>(["ERS", "IO", "ECOMM", "LEADGEN"]);
+  const platformCounts = dashboard.clients.reduce<Record<string, number>>((acc, c) => {
+    const p = c.client.platform.toUpperCase();
+    acc[p] = (acc[p] ?? 0) + 1;
+    return acc;
+  }, {});
+  const dominantPlatform =
+    Object.entries(platformCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "ERS";
+  const estVertical: Vertical = VALID_VERTICALS.has(dominantPlatform)
+    ? (dominantPlatform as Vertical)
+    : "ERS";
+
   // Use client-side overrides when filtering, otherwise server values
   const totalAdSpend = dashboard.totals.totalAdSpend ?? dashboard.totals.mtdSpend ?? 0;
   const totalAdSpendChange = dashboard.totals.totalAdSpendChange ?? dashboard.totals.momChange ?? null;
@@ -675,33 +702,53 @@ function HealthSummaryCards({
             sub={<span className="text-xs text-muted-foreground">from Google Analytics</span>}
           />
 
-          <KpiCard
-            label="Revenue MTD"
-            value={
-              mtdRevenue > 0 ? (
-                formatCurrency(mtdRevenue)
-              ) : missingFor("revenue").length > 0 ? (
-                <NaTooltip reasons={missingFor("revenue")} />
-              ) : (
-                <span className="text-muted-foreground">—</span>
-              )
-            }
-            sub={<span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>}
-          />
+          {allClientsLackCrm ? (
+            <EstimatedRevenueCard
+              label="Revenue MTD"
+              paidClicks={estPaidClicks}
+              seoSessions={estSeoSessions}
+              paidLeads={estPaidLeads}
+              vertical={estVertical}
+            />
+          ) : (
+            <KpiCard
+              label="Revenue MTD"
+              value={
+                mtdRevenue > 0 ? (
+                  formatCurrency(mtdRevenue)
+                ) : missingFor("revenue").length > 0 ? (
+                  <NaTooltip reasons={missingFor("revenue")} />
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )
+              }
+              sub={<span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>}
+            />
+          )}
 
-          <KpiCard
-            label="Revenue YTD"
-            value={
-              ytdRevenue > 0 ? (
-                formatCurrency(ytdRevenue)
-              ) : missingFor("revenue").length > 0 ? (
-                <NaTooltip reasons={missingFor("revenue")} />
-              ) : (
-                <span className="text-muted-foreground">—</span>
-              )
-            }
-            sub={<span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>}
-          />
+          {allClientsLackCrm ? (
+            <EstimatedRevenueCard
+              label="Revenue YTD"
+              paidClicks={estPaidClicks}
+              seoSessions={estSeoSessions}
+              paidLeads={estPaidLeads}
+              vertical={estVertical}
+            />
+          ) : (
+            <KpiCard
+              label="Revenue YTD"
+              value={
+                ytdRevenue > 0 ? (
+                  formatCurrency(ytdRevenue)
+                ) : missingFor("revenue").length > 0 ? (
+                  <NaTooltip reasons={missingFor("revenue")} />
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )
+              }
+              sub={<span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>}
+            />
+          )}
         </div>
       </div>
     </div>
