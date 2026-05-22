@@ -203,6 +203,20 @@ export default function Dashboard() {
     queryKey: ["/api/managers"],
   });
 
+  const [isSyncing, setIsSyncing] = useState(false);
+  const handleRefresh = async () => {
+    setIsSyncing(true);
+    try {
+      await apiRequest("POST", "/api/sync").catch(() => {}); // fire-and-forget sync
+    } finally {
+      // Wait a moment for sync to make progress, then re-read the DB
+      setTimeout(async () => {
+        await refetch();
+        setIsSyncing(false);
+      }, 4000);
+    }
+  };
+
   const { data: dashboard, isLoading, refetch, isFetching } = useQuery<DashboardData>({
     queryKey: ["/api/dashboard", selectedManager, selectedPeriod],
     queryFn: () => {
@@ -295,13 +309,13 @@ export default function Dashboard() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => refetch()}
-              disabled={isFetching}
+              onClick={handleRefresh}
+              disabled={isFetching || isSyncing}
               data-testid="button-refresh"
               className="gap-1.5 text-xs"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
-              Refresh
+              <RefreshCw className={`w-3.5 h-3.5 ${(isFetching || isSyncing) ? "animate-spin" : ""}`} />
+              {isSyncing ? "Syncing…" : "Refresh"}
             </Button>
             <Button
               size="sm"

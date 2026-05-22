@@ -715,19 +715,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const aMoM   = analytics.find(a => a.period === momPeriod);      // prior month
       const aYoY   = analytics.find(a => a.period === yoyPeriod);      // same month last year
 
-      const mtdSpend  = aNow?.adSpend  ?? 0;
-      const momSpend  = aMoM?.adSpend  ?? 0;
-      const yoySpend  = aYoY?.adSpend  ?? 0;
+      // Use per-platform breakdown when stored; fall back to the combined adSpend field
+      const sumSpend = (snap: typeof aNow) => {
+        if (!snap) return 0;
+        const g = snap.googleAdSpend ?? 0;
+        const m = snap.metaAdSpend   ?? 0;
+        return (g + m) > 0 ? Math.round((g + m) * 100) / 100 : (snap.adSpend ?? 0);
+      };
+      const mtdSpend  = sumSpend(aNow);
+      const momSpend  = sumSpend(aMoM);
+      const yoySpend  = sumSpend(aYoY);
+      // Expose the individual platform fields for the frontend breakdown
+      const mtdGoogleSpend = aNow?.googleAdSpend ?? 0;
+      const mtdMetaSpend   = aNow?.metaAdSpend   ?? 0;
       const momChange = pct(mtdSpend, momSpend);   // MoM: this month vs last month
       const yoyChange = pct(mtdSpend, yoySpend);   // YoY: this month vs same month last year
 
       // YTD spend: sum Jan–currentMonth this year vs same months last year
+      // Use per-platform breakdown (google + meta) where available
       const ytdSpendCurrent = analytics
         .filter(a => a.period.startsWith(ytdPrefixCurrent) && a.period <= currentPeriod)
-        .reduce((s, a) => s + (a.adSpend ?? 0), 0);
+        .reduce((s, a) => s + sumSpend(a), 0);
       const ytdSpendPrior = analytics
         .filter(a => a.period.startsWith(ytdPrefixPrior) && a.period <= yoyPeriod)
-        .reduce((s, a) => s + (a.adSpend ?? 0), 0);
+        .reduce((s, a) => s + sumSpend(a), 0);
       // Note: ytdRevenue also scoped to selected period below
       const ytdChange = pct(ytdSpendCurrent, ytdSpendPrior);
 
@@ -770,10 +781,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const priorA = analytics.find(x => x.period === priorPeriod);
           return {
             period: a.period,
-            adSpend: a.adSpend ?? null,
-            adSpendPriorYear: priorA?.adSpend ?? null,
+            adSpend: sumSpend(a),
+            googleAdSpend: a.googleAdSpend ?? null,
+            metaAdSpend: a.metaAdSpend ?? null,
+            adSpendPriorYear: priorA ? sumSpend(priorA) : null,
             leads: a.leads ?? null,
             sessions: a.sessions ?? null,
+            clicks: a.clicks ?? null,
           };
         });
 
@@ -819,6 +833,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         client,
         ads: {
           mtdSpend,
+          googleAdSpend: mtdGoogleSpend,
+          metaAdSpend: mtdMetaSpend,
           momSpend,
           momChange,
           yoySpend,
