@@ -112,7 +112,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             if (client.platform === "IO") {
               if (client.ioApiKey) {
                 try {
-                  const m2 = await fetchIOMetrics(client.ioApiKey, startDate, endDate);
+                  const m2 = await fetchIOMetrics(client.ioApiKey, startDate, endDate, client.ioLocationId);
                   storage.upsertRevenueSnapshot({ clientId: client.id, period, periodType: "month", revenue: m2.revenue, orderCount: m2.totalEvents, fetchedAt });
                   console.log(`[backfill] ${client.name} IO ${period}: $${m2.revenue} (${m2.totalEvents} events)`);
                 } catch (e: any) { console.error(`[backfill] ${client.name} IO ${period}:`, e.message); }
@@ -242,7 +242,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             if (client.platform === "IO") {
               if (client.ioApiKey) {
                 try {
-                  const m2 = await fetchIOMetrics(client.ioApiKey, startDate, endDate);
+                  const m2 = await fetchIOMetrics(client.ioApiKey, startDate, endDate, client.ioLocationId);
                   storage.upsertRevenueSnapshot({ clientId: client.id, period, periodType: "month", revenue: m2.revenue, orderCount: m2.totalEvents, fetchedAt });
                   console.log(`[rebackfill] ${client.name} IO ${period}: $${m2.revenue} (${m2.totalEvents} events)`);
                 } catch (e: any) { console.error(`[rebackfill] ${client.name} IO ${period}:`, e.message); }
@@ -372,7 +372,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     try {
       const { startDate, endDate } = req.body;
-      const metrics = await fetchIOMetrics(client.ioApiKey, startDate, endDate);
+      const metrics = await fetchIOMetrics(client.ioApiKey, startDate, endDate, client.ioLocationId);
       res.json(metrics);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -516,7 +516,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               console.warn(`[sync] ${client.name} is IO but missing ioApiKey — skipping`);
             } else {
               try {
-                const m = await fetchIOMetrics(client.ioApiKey, startDate, ersEndDate);
+                const m = await fetchIOMetrics(client.ioApiKey, startDate, ersEndDate, client.ioLocationId);
                 storage.upsertRevenueSnapshot({ clientId: client.id, period: targetPeriod, periodType: "month", revenue: m.revenue, orderCount: m.totalEvents, fetchedAt });
                 console.log(`[sync] ${client.name} IO: events=${m.totalEvents} revenue=$${m.revenue}`);
               } catch (e: any) { console.error(`[sync] ${client.name} IO:`, e.message); }

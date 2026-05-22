@@ -28,6 +28,7 @@ export const clients = sqliteTable("clients", {
   ersDevKey: text("ers_dev_key"),   // ERS Developer API Key (from Admin > API Keys)
   ioAccountId: text("io_account_id"),
   ioApiKey: text("io_api_key"),
+  ioLocationId: text("io_location_id"), // Required for multi-location IO accounts (from Warehouse/Addresses URL)
   aaaCampaignId: text("aaa_campaign_id"), // Agency Analytics campaign ID (legacy)
   agencyAnalyticsUrl: text("agency_analytics_url"), // Agency Analytics dashboard link
   ecommPlatform: text("ecomm_platform"), // shopify | woocommerce | etc

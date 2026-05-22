@@ -34,6 +34,7 @@ type Client = {
   ersDevKey: string | null;
   ioAccountId: string | null;
   ioApiKey: string | null;
+  ioLocationId: string | null;
   aaaCampaignId: string | null;
   agencyAnalyticsUrl: string | null;
   ecommPlatform: string | null;
@@ -70,6 +71,7 @@ export default function ClientsPage() {
     ersDevKey: "",
     ioAccountId: "",
     ioApiKey: "",
+    ioLocationId: "",
     aaaCampaignId: "",
     agencyAnalyticsUrl: "",
     ecommPlatform: "",
@@ -130,6 +132,7 @@ export default function ClientsPage() {
       ersApiKey: "",
       ioAccountId: "",
       ioApiKey: "",
+      ioLocationId: "",
       aaaCampaignId: "",
       ecommPlatform: "",
       googleAdsCustomerId: "",
@@ -153,6 +156,7 @@ export default function ClientsPage() {
       ersDevKey: (client as any).ersDevKey ?? "",
       ioAccountId: client.ioAccountId ?? "",
       ioApiKey: client.ioApiKey ?? "",
+      ioLocationId: client.ioLocationId ?? "",
       aaaCampaignId: client.aaaCampaignId ?? "",
       agencyAnalyticsUrl: client.agencyAnalyticsUrl ?? "",
       ecommPlatform: client.ecommPlatform ?? "",
@@ -174,6 +178,7 @@ export default function ClientsPage() {
       ersDevKey: form.ersDevKey || null,
       ioAccountId: form.ioAccountId || null,
       ioApiKey: form.ioApiKey || null,
+      ioLocationId: form.ioLocationId || null,
       aaaCampaignId: form.aaaCampaignId || null,
       agencyAnalyticsUrl: form.agencyAnalyticsUrl || null,
       ecommPlatform: form.ecommPlatform || null,
@@ -419,6 +424,16 @@ export default function ClientsPage() {
                     type="password"
                     value={form.ioApiKey}
                     onChange={(e) => setForm({ ...form, ioApiKey: e.target.value })}
+                    className="bg-secondary border-border"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">IO Location ID <span className="text-muted-foreground/60">(multi-location only)</span></Label>
+                  <Input
+                    data-testid="input-io-location-id"
+                    value={form.ioLocationId}
+                    onChange={(e) => setForm({ ...form, ioLocationId: e.target.value })}
+                    placeholder="e.g. 42 — from Warehouse → Addresses URL"
                     className="bg-secondary border-border"
                   />
                 </div>
