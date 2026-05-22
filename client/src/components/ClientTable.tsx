@@ -9,11 +9,14 @@ import {
   Clock,
   AlertTriangle,
   CheckCircle,
+  Sparkles,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { ClientSummary, Manager } from "@/pages/Dashboard";
 import { getAdMetrics } from "@/pages/Dashboard";
+import { isCrmConnected } from "@/lib/crmStatus";
+import { estimateRevenue, type Vertical } from "@/lib/revenueEstimator";
 
 interface Props {
   clients: ClientSummary[];
@@ -198,6 +201,50 @@ function LastTouchCell({
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Estimated Revenue Cell ───────────────────────────────────────────────────
+
+const VALID_VERTICALS = new Set<string>(["ERS", "IO", "ECOMM", "LEADGEN"]);
+function toVertical(platform: string): Vertical {
+  const p = platform.toUpperCase();
+  return VALID_VERTICALS.has(p) ? (p as Vertical) : "ERS";
+}
+
+function EstimatedCell({ row }: { row: ClientSummary }) {
+  const [show, setShow] = useState(false);
+  const metrics = getAdMetrics(row);
+  const breakdown = estimateRevenue({
+    paidClicks: (metrics as any).clicks ?? 0,
+    seoSessions: metrics.sessions ?? 0,
+    paidLeads: metrics.leads ?? 0,
+    vertical: toVertical(row.client.platform),
+  });
+
+  return (
+    <span
+      className="relative inline-flex items-center gap-1 cursor-help"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      data-testid="cell-estimated-revenue"
+    >
+      <Sparkles className="w-3 h-3 text-amber-500 shrink-0" />
+      <span className="text-amber-600 dark:text-amber-400 font-medium tabular-nums">
+        ~{formatCurrency(breakdown.estimatedRevenue)}
+      </span>
+      {show && (
+        <span className="absolute z-50 bottom-full left-0 mb-2 w-64 bg-popover border border-border rounded-lg shadow-lg p-3 text-xs text-popover-foreground whitespace-normal">
+          <span className="font-semibold block mb-1">Estimated — CRM not connected</span>
+          <span className="block text-muted-foreground leading-relaxed mb-2">
+            {breakdown.formula || "No traffic data available"}
+          </span>
+          <span className="block text-muted-foreground border-t border-border pt-1.5">
+            Connect CRM in the Clients page to see real revenue.
+          </span>
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -470,10 +517,12 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                     )}
                   </td>
 
-                  {/* Revenue MTD — context only, muted */}
+                  {/* Revenue MTD — real, estimated, or blank */}
                   <td className="px-4 py-3 tabular-nums text-muted-foreground">
                     {(revenue?.mtd ?? 0) > 0 ? (
                       formatCurrency(revenue.mtd)
+                    ) : !isCrmConnected(row) ? (
+                      <EstimatedCell row={row} />
                     ) : (
                       <span className="text-sm">—</span>
                     )}
