@@ -106,7 +106,12 @@ export function getAdMetrics(c: ClientSummary): AdMetrics {
 
   const base: AdMetrics = {
     ...raw,
-    adSpend: (raw as any).adSpend ?? (raw as any).mtdSpend ?? 0,
+    // Prefer per-platform breakdown (googleAdSpend + metaAdSpend) so clients
+    // with both ad accounts show the true combined total.  Falls back to the
+    // server-aggregated adSpend field for older records or when both fields
+    // are absent/zero.
+    adSpend: (((raw as any).googleAdSpend ?? 0) + ((raw as any).metaAdSpend ?? 0))
+      || ((raw as any).adSpend ?? (raw as any).mtdSpend ?? 0),
     // momSpend from server maps to adSpendPrior used in client-side aggregation
     adSpendPrior: (raw as any).adSpendPrior ?? (raw as any).momSpend ?? 0,
     adSpendChange: (raw as any).adSpendChange ?? (raw as any).momChange ?? null,
@@ -125,7 +130,12 @@ export function getAdMetrics(c: ClientSummary): AdMetrics {
   const ytdPrefix    = String(curY);
   const ytdPriorPfx  = String(curY - 1);
 
-  const byPeriod = Object.fromEntries(history.map((h) => [h.period, h.adSpend ?? 0]));
+  // Per-period spend: sum googleAdSpend + metaAdSpend when available so that
+  // YoY / YTD comparisons also reflect the true combined platform total.
+  const byPeriod = Object.fromEntries(history.map((h) => [
+    h.period,
+    (((h.googleAdSpend ?? 0) + (h.metaAdSpend ?? 0)) || (h.adSpend ?? 0)),
+  ]));
 
   const mtdSpend  = byPeriod[currentPeriod] ?? base.adSpend;
   const yoySpend  = byPeriod[yoyPeriod] ?? 0;
