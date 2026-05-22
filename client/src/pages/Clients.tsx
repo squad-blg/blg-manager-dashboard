@@ -19,7 +19,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, RefreshCw } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import type { Manager } from "@/pages/Dashboard";
 import { useToast } from "@/hooks/use-toast";
@@ -62,6 +62,8 @@ export default function ClientsPage() {
   const [selectedManager, setSelectedManager] = useState<string | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [ioLocations, setIoLocations] = useState<Array<{ id: string; name: string }>>([]);
+  const [loadingLocations, setLoadingLocations] = useState(false);
   const [form, setForm] = useState({
     name: "",
     managerId: "",
@@ -122,8 +124,27 @@ export default function ClientsPage() {
     },
   });
 
+  async function loadIOLocations(apiKey: string) {
+    if (!apiKey) return;
+    setLoadingLocations(true);
+    try {
+      const res = await apiRequest("GET", `/api/io/locations?apiKey=${encodeURIComponent(apiKey)}`);
+      const data = await res.json();
+      if (data.locations) {
+        setIoLocations(data.locations);
+      } else {
+        toast({ title: "Could not load locations", description: data.error ?? "Unknown error", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Could not load locations", description: "Check the API key and try again", variant: "destructive" });
+    } finally {
+      setLoadingLocations(false);
+    }
+  }
+
   function openNew() {
     setEditingClient(null);
+    setIoLocations([]);
     setForm({
       name: "",
       managerId: managers?.[0]?.id ?? "",
@@ -147,6 +168,7 @@ export default function ClientsPage() {
 
   function openEdit(client: Client) {
     setEditingClient(client);
+    setIoLocations([]);
     setForm({
       name: client.name,
       managerId: client.managerId,
@@ -428,14 +450,45 @@ export default function ClientsPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">IO Location ID <span className="text-muted-foreground/60">(multi-location only)</span></Label>
-                  <Input
-                    data-testid="input-io-location-id"
-                    value={form.ioLocationId}
-                    onChange={(e) => setForm({ ...form, ioLocationId: e.target.value })}
-                    placeholder="e.g. 42 — from Warehouse → Addresses URL"
-                    className="bg-secondary border-border"
-                  />
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">
+                      IO Location ID <span className="text-muted-foreground/60">(multi-location only)</span>
+                    </Label>
+                    <button
+                      type="button"
+                      onClick={() => loadIOLocations(form.ioApiKey)}
+                      disabled={!form.ioApiKey || loadingLocations}
+                      className="flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${loadingLocations ? "animate-spin" : ""}`} />
+                      {loadingLocations ? "Loading…" : "Load locations"}
+                    </button>
+                  </div>
+                  {ioLocations.length > 0 ? (
+                    <Select
+                      value={form.ioLocationId}
+                      onValueChange={(v) => setForm({ ...form, ioLocationId: v })}
+                    >
+                      <SelectTrigger className="bg-secondary border-border" data-testid="select-io-location">
+                        <SelectValue placeholder="Select a location…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ioLocations.map((loc) => (
+                          <SelectItem key={loc.id} value={loc.id}>
+                            {loc.name} <span className="text-muted-foreground ml-1">#{loc.id}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      data-testid="input-io-location-id"
+                      value={form.ioLocationId}
+                      onChange={(e) => setForm({ ...form, ioLocationId: e.target.value })}
+                      placeholder="Enter ID manually or click Load locations above"
+                      className="bg-secondary border-border"
+                    />
+                  )}
                 </div>
               </>
             )}
