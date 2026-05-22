@@ -121,6 +121,7 @@ const migrations = [
   `ALTER TABLE analytics_snapshots ADD COLUMN google_ad_spend REAL`,
   `ALTER TABLE analytics_snapshots ADD COLUMN meta_ad_spend REAL`,
   `ALTER TABLE clients ADD COLUMN agency_analytics_url TEXT`,
+  `ALTER TABLE clients ADD COLUMN io_location_id TEXT`,
 ];
 for (const sql of migrations) {
   try { sqlite.exec(sql); } catch { /* column already exists */ }

@@ -21,25 +21,38 @@ export interface IOMetrics {
 const BASE_URL = "https://rental.software/api6";
 
 /**
- * @param apiKey    IO API key from Settings → API Keys
- * @param startDate YYYY-MM-DD
- * @param endDate   YYYY-MM-DD
+ * @param apiKey     IO API key from Settings → API Keys
+ * @param startDate  YYYY-MM-DD
+ * @param endDate    YYYY-MM-DD
+ * @param locationId Optional — required for multi-location IO accounts.
+ *                   Find it in IO: Warehouse → Addresses → open the location → last number in URL.
  */
 export async function fetchIOMetrics(
   apiKey: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  locationId?: string | null
 ): Promise<IOMetrics> {
   // Convert YYYY-MM-DD to Unix timestamps
   const start = Math.floor(new Date(startDate + "T00:00:00Z").getTime() / 1000);
   const end = Math.floor(new Date(endDate + "T23:59:59Z").getTime() / 1000);
 
-  console.log(`[io] Fetching stats ${startDate} → ${endDate} (${start} → ${end})`);
+  const locationSuffix = locationId ? ` (location ${locationId})` : "";
+  console.log(`[io] Fetching stats ${startDate} → ${endDate} (${start} → ${end})${locationSuffix}`);
 
   try {
     // IO API requires GET with query params (despite docs showing POST example)
+    // Multi-location accounts require a locationid parameter — without it the API
+    // returns 403 "Permission access restricted. Overview Stats Full Access Required."
+    const params: Record<string, string> = {
+      apiKey,
+      start: String(start),
+      end: String(end),
+    };
+    if (locationId) params.locationid = locationId;
+
     const res = await axios.get(`${BASE_URL}/stats`, {
-      params: { apiKey, start: String(start), end: String(end) },
+      params,
       timeout: 20_000,
     });
 
