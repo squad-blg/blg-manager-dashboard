@@ -501,11 +501,8 @@ function HealthSummaryCards({
   } = dashboard.totals;
 
   // ── Estimated-revenue fallback inputs ────────────────────────────────────────
-  // Only show the estimated card when EVERY visible client has no CRM connected.
-  // Mixed portfolios (some real, some missing) keep the existing NaTooltip path.
-  const allClientsLackCrm =
-    dashboard.clients.length > 0 &&
-    dashboard.clients.every((c) => !isCrmConnected(c));
+  // Show estimated whenever the portfolio has no real revenue — whether the CRM
+  // is missing entirely or connected but returning $0 for the period.
 
   // MTD traffic — from getAdMetrics() for the current period
   const estPaidClicks  = dashboard.clients.reduce((s, c) => s + ((getAdMetrics(c) as any).clicks  ?? 0), 0);
@@ -546,11 +543,12 @@ function HealthSummaryCards({
   const totalAdSpendChange = dashboard.totals.totalAdSpendChange ?? dashboard.totals.momChange ?? null;
 
   // Estimated MTD revenue as a plain number — used for ROAS calculation below
-  const estMtdRevenue = allClientsLackCrm
-    ? estimateRevenue({ paidClicks: estPaidClicks, seoSessions: estSeoSessions, paidLeads: estPaidLeads, vertical: estVertical }).estimatedRevenue
-    : 0;
+  const estMtdRevenue = estimateRevenue({
+    paidClicks: estPaidClicks, seoSessions: estSeoSessions,
+    paidLeads: estPaidLeads, vertical: estVertical,
+  }).estimatedRevenue;
   // Estimated MTD ROAS — only meaningful when there is real ad spend to divide by
-  const estMtdRoas = allClientsLackCrm && totalAdSpend > 0
+  const estMtdRoas = totalAdSpend > 0
     ? Math.round((estMtdRevenue / totalAdSpend) * 100) / 100
     : null;
 
@@ -674,7 +672,17 @@ function HealthSummaryCards({
             }
           />
 
-          {allClientsLackCrm && estMtdRoas != null ? (
+          {portfolioMtdRoas != null ? (
+            <KpiCard
+              label="MTD ROAS"
+              value={`${portfolioMtdRoas.toFixed(2)}x`}
+              sub={
+                <span className="text-xs text-muted-foreground">
+                  ${portfolioMtdRoas.toFixed(2)} revenue per $1 spent
+                </span>
+              }
+            />
+          ) : estMtdRoas != null ? (
             <KpiCard
               label="MTD ROAS"
               value={
@@ -692,20 +700,8 @@ function HealthSummaryCards({
           ) : (
             <KpiCard
               label="MTD ROAS"
-              value={
-                portfolioMtdRoas != null ? (
-                  `${portfolioMtdRoas.toFixed(2)}x`
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )
-              }
-              sub={
-                <span className="text-xs text-muted-foreground">
-                  {portfolioMtdRoas != null
-                    ? `$${portfolioMtdRoas.toFixed(2)} revenue per $1 spent`
-                    : "Awaiting revenue data"}
-                </span>
-              }
+              value={<span className="text-muted-foreground">—</span>}
+              sub={<span className="text-xs text-muted-foreground">No ad spend this period</span>}
             />
           )}
         </div>
@@ -745,7 +741,13 @@ function HealthSummaryCards({
             sub={<span className="text-xs text-muted-foreground">from Google Analytics</span>}
           />
 
-          {allClientsLackCrm ? (
+          {mtdRevenue > 0 ? (
+            <KpiCard
+              label="Revenue MTD"
+              value={formatCurrency(mtdRevenue)}
+              sub={<span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>}
+            />
+          ) : (
             <EstimatedRevenueCard
               label="Revenue MTD"
               paidClicks={estPaidClicks}
@@ -753,43 +755,21 @@ function HealthSummaryCards({
               paidLeads={estPaidLeads}
               vertical={estVertical}
             />
-          ) : (
-            <KpiCard
-              label="Revenue MTD"
-              value={
-                mtdRevenue > 0 ? (
-                  formatCurrency(mtdRevenue)
-                ) : missingFor("revenue").length > 0 ? (
-                  <NaTooltip reasons={missingFor("revenue")} />
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )
-              }
-              sub={<span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>}
-            />
           )}
 
-          {allClientsLackCrm ? (
+          {ytdRevenue > 0 ? (
+            <KpiCard
+              label="Revenue YTD"
+              value={formatCurrency(ytdRevenue)}
+              sub={<span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>}
+            />
+          ) : (
             <EstimatedRevenueCard
               label="Revenue YTD"
               paidClicks={estYtdPaidClicks}
               seoSessions={estYtdSeoSessions}
               paidLeads={estYtdPaidLeads}
               vertical={estVertical}
-            />
-          ) : (
-            <KpiCard
-              label="Revenue YTD"
-              value={
-                ytdRevenue > 0 ? (
-                  formatCurrency(ytdRevenue)
-                ) : missingFor("revenue").length > 0 ? (
-                  <NaTooltip reasons={missingFor("revenue")} />
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )
-              }
-              sub={<span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>}
             />
           )}
         </div>
