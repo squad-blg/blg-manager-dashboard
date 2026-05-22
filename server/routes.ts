@@ -379,6 +379,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // IO Locations proxy — returns the list of locations for a given IO API key.
+  // Used by the Clients form to populate the location picker without exposing
+  // the API key to the browser.
+  app.get("/api/io/locations", async (req, res) => {
+    const { apiKey } = req.query as { apiKey?: string };
+    if (!apiKey) return res.status(400).json({ error: "apiKey required" });
+    try {
+      const result = await axios.get("https://rental.software/api6/locations/", {
+        params: { apiKey, offset: 0, limit: 100 },
+        timeout: 10_000,
+      });
+      // Return just the items array to the client
+      const items: Array<{ id: string; name: string }> = (result.data?.items ?? []).map(
+        (loc: any) => ({ id: String(loc.id), name: loc.name })
+      );
+      res.json({ locations: items });
+    } catch (e: any) {
+      const status = e.response?.status ?? 500;
+      const message = e.response?.data?.message ?? e.message;
+      res.status(status).json({ error: message });
+    }
+  });
+
   // Google Ads live fetch proxy
   app.post("/api/fetch/google/:clientId", async (req, res) => {
     const client = storage.getClient(req.params.clientId);
