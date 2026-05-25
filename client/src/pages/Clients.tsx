@@ -128,15 +128,25 @@ export default function ClientsPage() {
     if (!apiKey) return;
     setLoadingLocations(true);
     try {
-      const res = await apiRequest("GET", `/api/io/locations?apiKey=${encodeURIComponent(apiKey)}`);
+      // Use raw fetch so we can read the error body even on non-2xx responses
+      const res = await fetch(`/api/io/locations?apiKey=${encodeURIComponent(apiKey)}`);
       const data = await res.json();
-      if (data.locations) {
-        setIoLocations(data.locations);
+      if (res.ok && data.locations) {
+        if (data.locations.length === 0) {
+          toast({
+            title: "No locations found",
+            description: "This account has no locations — it may be a single-location account. Leave the Location ID blank.",
+          });
+        } else {
+          setIoLocations(data.locations);
+        }
       } else {
-        toast({ title: "Could not load locations", description: data.error ?? "Unknown error", variant: "destructive" });
+        // Show the exact error from IO so it's actionable
+        const msg = data.error ?? `HTTP ${res.status}`;
+        toast({ title: "IO API error", description: msg, variant: "destructive" });
       }
-    } catch {
-      toast({ title: "Could not load locations", description: "Check the API key and try again", variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: "Network error", description: e?.message ?? "Could not reach the server", variant: "destructive" });
     } finally {
       setLoadingLocations(false);
     }

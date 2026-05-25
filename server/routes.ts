@@ -397,8 +397,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ locations: items });
     } catch (e: any) {
       const status = e.response?.status ?? 500;
-      const message = e.response?.data?.message ?? e.message;
-      res.status(status).json({ error: message });
+      // Pass through the full IO error body so the client can show it verbatim
+      const ioBody = e.response?.data;
+      const message = (typeof ioBody === "object" ? ioBody?.message : ioBody)
+        ?? e.message
+        ?? "Unknown error from IO API";
+      console.error(`[io-locations] ${status}: ${message}`);
+      res.status(status).json({ error: message, raw: ioBody });
     }
   });
 
