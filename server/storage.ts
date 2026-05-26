@@ -146,8 +146,26 @@ if (managerCount.count === 0) {
   sqlite.exec(`
     INSERT INTO managers (id, name, email, color) VALUES ('jarvis', 'Jarvis Gatlin', 'jarvis@bestlyfegroup.com', '#7DC242');
     INSERT INTO managers (id, name, email, color) VALUES ('jan', 'Jan Feterman', 'jan@bestlyfegroup.com', '#4A8C1C');
-    INSERT INTO managers (id, name, email, color) VALUES ('adriana', 'Adriana Zendan', 'adriana@bestlyfegroup.com', '#F59E0B');
+    INSERT INTO managers (id, name, email, color) VALUES ('adriana', 'Adriana Zedan', 'adriana@bestlyfegroup.com', '#F59E0B');
   `);
+}
+
+// One-time data fixes — idempotent, tracked via api_credentials flag
+try {
+  const fixed = sqlite.prepare("SELECT key FROM api_credentials WHERE id = 'data_fix_v1'").get();
+  if (!fixed) {
+    // Fix Adriana's last name (Zendan → Zedan)
+    sqlite.prepare("UPDATE managers SET name = 'Adriana Zedan' WHERE id = 'adriana' AND name = 'Adriana Zendan'").run();
+    // Trim A&G cross-references from client display names
+    sqlite.prepare("UPDATE clients SET name = 'A&G' WHERE name = 'A&G (Rockin Bouncies)'").run();
+    sqlite.prepare("UPDATE clients SET name = 'Rockin Bouncies' WHERE name = 'Rockin Bouncies (A&G)'").run();
+    sqlite.prepare(
+      "INSERT INTO api_credentials (id, service, key, label, updated_at) VALUES ('data_fix_v1', 'system', '1', 'Data fix v1 applied', datetime('now'))"
+    ).run();
+    console.log('[startup] Data fix v1 applied — manager name + client names corrected.');
+  }
+} catch (e: any) {
+  console.error('[startup] Data fix v1 error:', e.message);
 }
 
 export interface IStorage {
