@@ -270,12 +270,18 @@ function EstimatedCell({ row }: { row: ClientSummary }) {
   );
 }
 
+function roasClass(v: number | null | undefined): string {
+  if (v == null || isNaN(v)) return "text-emerald-500";
+  return v >= 7.0 ? "text-green-500 dark:text-green-400" : "text-emerald-500";
+}
+
 function EstimatedRoasCell({ row }: { row: ClientSummary }) {
   const [show, setShow] = useState(false);
   const breakdown = useEstimatedBreakdown(row);
   const adSpend = getAdMetrics(row).adSpend ?? 0;
   if (adSpend <= 0) return <span className="text-muted-foreground text-xs">—</span>;
   const roas = Math.round((breakdown.estimatedRevenue / adSpend) * 100) / 100;
+  const isHigh = roas >= 7.0;
 
   return (
     <span
@@ -284,8 +290,8 @@ function EstimatedRoasCell({ row }: { row: ClientSummary }) {
       onMouseLeave={() => setShow(false)}
       data-testid="cell-estimated-roas"
     >
-      <Sparkles className="w-3 h-3 text-amber-500 shrink-0" />
-      <span className="text-amber-600 dark:text-amber-400 font-semibold tabular-nums">
+      <Sparkles className={`w-3 h-3 shrink-0 ${isHigh ? "text-green-500 dark:text-green-400" : "text-amber-500"}`} />
+      <span className={`font-semibold tabular-nums ${isHigh ? "text-green-500 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`}>
         ~{roas.toFixed(2)}x
       </span>
       {show && (
@@ -584,7 +590,7 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                   {/* ROAS — real if CRM returned it, estimated otherwise */}
                   <td className="px-4 py-3 tabular-nums">
                     {analytics?.mtdRoas != null ? (
-                      <span className="font-semibold text-emerald-500">
+                      <span className={`font-semibold ${roasClass(analytics.mtdRoas)}`}>
                         {analytics.mtdRoas.toFixed(2)}x
                       </span>
                     ) : (

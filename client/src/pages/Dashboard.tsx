@@ -713,7 +713,11 @@ function HealthSummaryCards({
           {portfolioMtdRoas != null ? (
             <KpiCard
               label="MTD ROAS"
-              value={`${portfolioMtdRoas.toFixed(2)}x`}
+              value={
+                <span className={portfolioMtdRoas >= 7.0 ? "text-green-500 dark:text-green-400" : undefined}>
+                  {portfolioMtdRoas.toFixed(2)}x
+                </span>
+              }
               sub={
                 <span className="text-xs text-muted-foreground">
                   ${portfolioMtdRoas.toFixed(2)} revenue per $1 spent
@@ -725,8 +729,8 @@ function HealthSummaryCards({
               label="MTD ROAS"
               value={
                 <span className="inline-flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
-                  <span className="text-amber-600 dark:text-amber-400">~{estMtdRoas.toFixed(2)}x</span>
+                  <Sparkles className={`w-4 h-4 shrink-0 ${estMtdRoas >= 7.0 ? "text-green-500 dark:text-green-400" : "text-amber-500"}`} />
+                  <span className={estMtdRoas >= 7.0 ? "text-green-500 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}>~{estMtdRoas.toFixed(2)}x</span>
                 </span>
               }
               sub={
