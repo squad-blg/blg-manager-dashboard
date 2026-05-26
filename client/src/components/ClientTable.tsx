@@ -44,9 +44,28 @@ function todayISO() {
   ).padStart(2, "0")}`;
 }
 
-function TrendBadge({ change }: { change: number | null | undefined }) {
+function TrendBadge({
+  change,
+  neutral = false,
+}: {
+  change: number | null | undefined;
+  neutral?: boolean;
+}) {
   if (change == null)
     return <span className="text-muted-foreground text-xs">—</span>;
+
+  // Neutral mode (e.g. Spend): show direction arrow but no success/danger colour.
+  if (neutral) {
+    const Icon = change > 0 ? TrendingUp : change < 0 ? TrendingDown : Minus;
+    return (
+      <span className="flex items-center gap-0.5 text-muted-foreground text-xs font-semibold tabular-nums">
+        <Icon className="w-3 h-3" />
+        {change > 0 ? "+" : ""}
+        {change.toFixed(2)}%
+      </span>
+    );
+  }
+
   if (change > 5)
     return (
       <span className="flex items-center gap-0.5 text-emerald-500 text-xs font-semibold tabular-nums">
@@ -534,14 +553,14 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                     )}
                   </td>
 
-                  {/* MoM */}
+                  {/* MoM — spend direction is neutral, not success/danger */}
                   <td className="px-4 py-3">
-                    <TrendBadge change={analytics.adSpendChange} />
+                    <TrendBadge change={analytics.adSpendChange} neutral />
                   </td>
 
-                  {/* YoY (this month vs same month last year) */}
+                  {/* YoY — spend direction is neutral, not success/danger */}
                   <td className="px-4 py-3">
-                    <TrendBadge change={analytics.yoyChange} />
+                    <TrendBadge change={analytics.yoyChange} neutral />
                   </td>
 
                   {/* YTD Spend */}

@@ -391,17 +391,31 @@ function formatCurrency(v: number) {
   return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function StatChange({ change, label }: { change: number | null | undefined; label: string }) {
+function StatChange({
+  change,
+  label,
+  neutral = false,
+}: {
+  change: number | null | undefined;
+  label: string;
+  neutral?: boolean;
+}) {
   if (change == null || isNaN(change))
     return <span className="text-xs text-muted-foreground">— {label}</span>;
   const up = change > 0;
   const down = change < 0;
+
+  // Neutral mode (e.g. Spend): direction arrow kept but no success/danger tint.
+  const colorClass = neutral
+    ? "text-muted-foreground"
+    : up
+    ? "text-emerald-500"
+    : down
+    ? "text-red-500"
+    : "text-muted-foreground";
+
   return (
-    <span
-      className={`flex items-center gap-1 text-xs font-semibold tabular-nums ${
-        up ? "text-emerald-500" : down ? "text-red-500" : "text-muted-foreground"
-      }`}
-    >
+    <span className={`flex items-center gap-1 text-xs font-semibold tabular-nums ${colorClass}`}>
       {up ? (
         <TrendingUp className="w-3.5 h-3.5 shrink-0" />
       ) : down ? (
@@ -647,8 +661,8 @@ function HealthSummaryCards({
             }
             sub={
               <div className="space-y-1">
-                <StatChange change={totalAdSpendChange} label="MoM" />
-                <StatChange change={portfolioYoyChange} label="YoY" />
+                <StatChange change={totalAdSpendChange} label="MoM" neutral />
+                <StatChange change={portfolioYoyChange} label="YoY" neutral />
               </div>
             }
           />
@@ -665,7 +679,7 @@ function HealthSummaryCards({
                 <span className="text-muted-foreground">—</span>
               )
             }
-            sub={<StatChange change={portfolioYtdChange} label="vs last year" />}
+            sub={<StatChange change={portfolioYtdChange} label="vs last year" neutral />}
           />
 
           <KpiCard
