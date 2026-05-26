@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
+import { Calendar } from "@/components/ui/calendar";
 import {
   TrendingUp,
   TrendingDown,
@@ -41,6 +42,23 @@ function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+/**
+ * Parse a YYYY-MM-DD string into a local-time Date.
+ * Using new Date(iso) would parse as UTC midnight and shift the
+ * displayed day by the user's UTC offset — this avoids that.
+ */
+function isoToLocalDate(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/** Serialize a local Date back to YYYY-MM-DD without UTC shifting. */
+function dateToISO(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate()
   ).padStart(2, "0")}`;
 }
 
@@ -161,12 +179,15 @@ function LastTouchCell({
     mutation.mutate(date);
   }
 
-  function handleDateChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (!e.target.value) return;
-    setLocalDate(e.target.value);
+  function handleCalendarSelect(date: Date | undefined) {
+    if (!date) return;
+    const iso = dateToISO(date);
+    setLocalDate(iso);
     setSaving(true);
-    mutation.mutate(e.target.value);
+    mutation.mutate(iso);
   }
+
+  const selectedDate = localDate ? isoToLocalDate(localDate) : undefined;
 
   return (
     <div className="relative" ref={popoverRef}>
@@ -194,7 +215,7 @@ function LastTouchCell({
       </button>
 
       {open && (
-        <div className="absolute z-50 top-full left-0 mt-1.5 w-56 bg-card border border-border rounded-lg shadow-lg p-3 space-y-2">
+        <div className="absolute z-50 top-full left-0 mt-1.5 bg-card border border-border rounded-lg shadow-lg p-3 space-y-2">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
             Log touch
           </p>
@@ -209,12 +230,19 @@ function LastTouchCell({
             <span className="text-xs text-muted-foreground">or pick a date</span>
             <div className="flex-1 h-px bg-border" />
           </div>
-          <input
-            type="date"
-            defaultValue={health?.lastTouchDate ?? todayISO()}
-            max={todayISO()}
-            onChange={handleDateChange}
-            className="w-full px-2 py-1.5 rounded-md border border-border bg-background text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+          {/*
+           * Calendar is a React-rendered DayPicker — all month-nav arrows are
+           * real DOM nodes inside popoverRef, so mousedown on them correctly
+           * satisfies contains() and the popover stays open.
+           * Replacing <input type="date"> fixes the premature-close bug caused
+           * by the native browser calendar rendering outside the React tree.
+           */}
+          <Calendar
+            mode="single"
+            selected={selectedDate}
+            onSelect={handleCalendarSelect}
+            disabled={{ after: new Date() }}
+            className="rounded-md"
           />
         </div>
       )}
