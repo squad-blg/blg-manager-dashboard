@@ -344,6 +344,9 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
     }
   }
 
+  // True when every visible client is leads-based (no e-commerce revenue CRM)
+  const isLeadGenView = clients.length > 0 && clients.every((c) => c.client.platform === "LEADGEN");
+
   const sorted = [...clients].sort((a, b) => {
     let va: number | string = 0;
     let vb: number | string = 0;
@@ -459,20 +462,20 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
               >
                 YTD Spend <SortIcon field="ytdSpend" />
               </th>
-              {/* Revenue — context only */}
+              {/* Revenue (ecomm) or Leads (leadgen) */}
               <th
                 className={thClass}
                 onClick={() => handleSort("revenue")}
                 data-testid="sort-revenue"
               >
-                Revenue MTD <SortIcon field="revenue" />
+                {isLeadGenView ? "Leads MTD" : "Revenue MTD"} <SortIcon field="revenue" />
               </th>
               <th
                 className={thClass}
                 onClick={() => handleSort("roas")}
                 data-testid="sort-roas"
               >
-                ROAS <SortIcon field="roas" />
+                {isLeadGenView ? "CPL" : "ROAS"} <SortIcon field="roas" />
               </th>
               <th
                 className={thClass}
@@ -578,18 +581,38 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                     )}
                   </td>
 
-                  {/* Revenue MTD — real if CRM returned it, estimated otherwise */}
+                  {/* Revenue MTD (ecomm) — or Leads MTD for lead-gen clients */}
                   <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                    {(revenue?.mtd ?? 0) > 0 ? (
-                      formatCurrency(revenue.mtd)
+                    {client.platform === "LEADGEN" ? (
+                      analytics.leads != null && analytics.leads > 0 ? (
+                        <span className="font-semibold text-foreground">
+                          {analytics.leads.toLocaleString()}
+                          <span className="text-xs text-muted-foreground font-normal ml-1">leads</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )
                     ) : (
-                      <EstimatedCell row={row} />
+                      (revenue?.mtd ?? 0) > 0 ? (
+                        formatCurrency(revenue.mtd)
+                      ) : (
+                        <EstimatedCell row={row} />
+                      )
                     )}
                   </td>
 
-                  {/* ROAS — real if CRM returned it, estimated otherwise */}
+                  {/* ROAS (ecomm) — or CPL for lead-gen clients */}
                   <td className="px-4 py-3 tabular-nums">
-                    {analytics?.mtdRoas != null ? (
+                    {client.platform === "LEADGEN" ? (
+                      analytics.leads && analytics.leads > 0 && analytics.adSpend > 0 ? (
+                        <span className="font-semibold text-blue-500 dark:text-blue-400">
+                          {formatCurrency(analytics.adSpend / analytics.leads)}
+                          <span className="text-xs text-muted-foreground font-normal ml-1">CPL</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )
+                    ) : analytics?.mtdRoas != null ? (
                       <span className={`font-semibold ${roasClass(analytics.mtdRoas)}`}>
                         {analytics.mtdRoas.toFixed(2)}x
                       </span>

@@ -168,6 +168,20 @@ try {
   console.error('[startup] Data fix v1 error:', e.message);
 }
 
+// Data fix v2 — flag A&G as LEADGEN (leads-based account, no e-commerce revenue CRM)
+try {
+  const fixed = sqlite.prepare("SELECT key FROM api_credentials WHERE id = 'data_fix_v2'").get();
+  if (!fixed) {
+    sqlite.prepare("UPDATE clients SET platform = 'LEADGEN' WHERE name = 'A&G' AND platform != 'LEADGEN'").run();
+    sqlite.prepare(
+      "INSERT INTO api_credentials (id, service, key, label, updated_at) VALUES ('data_fix_v2', 'system', '1', 'Data fix v2 applied', datetime('now'))"
+    ).run();
+    console.log('[startup] Data fix v2 applied — A&G platform set to LEADGEN.');
+  }
+} catch (e: any) {
+  console.error('[startup] Data fix v2 error:', e.message);
+}
+
 export interface IStorage {
   getManagers(): schema.Manager[];
   getManager(id: string): schema.Manager | undefined;

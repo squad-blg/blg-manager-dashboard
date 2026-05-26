@@ -576,9 +576,31 @@ function HealthSummaryCards({
     ? (dominantPlatform as Vertical)
     : "ERS";
 
+  // ── Lead-gen view detection ────────────────────────────────────────────────
+  // Activates when every visible client is leads-based (platform = LEADGEN).
+  const isLeadGenView = dashboard.clients.length > 0 &&
+    dashboard.clients.every((c) => c.client.platform === "LEADGEN");
+
+  // Lead-gen aggregated KPIs
+  const leadGenLeads    = dashboard.clients.reduce((s, c) => s + (getAdMetrics(c).leads    ?? 0), 0);
+  const leadGenSessions = dashboard.clients.reduce((s, c) => s + (getAdMetrics(c).sessions ?? 0), 0);
+  // MoM leads change — use the single-client value if available, otherwise compute from raw ads
+  const leadGenLeadsChange = (() => {
+    if (dashboard.clients.length === 1) return getAdMetrics(dashboard.clients[0]).leadsChange ?? null;
+    const priorLeads = dashboard.clients.reduce((s, c) => s + ((c.ads as any)?.momLeads ?? 0), 0);
+    if (priorLeads === 0) return null;
+    return Math.round(((leadGenLeads - priorLeads) / priorLeads) * 10000) / 100;
+  })();
+
   // Use client-side overrides when filtering, otherwise server values
   const totalAdSpend = dashboard.totals.totalAdSpend ?? dashboard.totals.mtdSpend ?? 0;
   const totalAdSpendChange = dashboard.totals.totalAdSpendChange ?? dashboard.totals.momChange ?? null;
+
+  // CPL and lead conversion rate — derived client-side from already-available metrics
+  const leadGenCpl = leadGenLeads > 0 && totalAdSpend > 0
+    ? Math.round((totalAdSpend / leadGenLeads) * 100) / 100 : null;
+  const leadGenCvr = leadGenSessions > 0 && leadGenLeads > 0
+    ? Math.round((leadGenLeads / leadGenSessions) * 10000) / 100 : null;
 
   // Estimated MTD revenue as a plain number — used for ROAS calculation below
   const estMtdRevenue = estimateRevenue({
@@ -710,7 +732,26 @@ function HealthSummaryCards({
             }
           />
 
-          {portfolioMtdRoas != null ? (
+          {isLeadGenView ? (
+            /* Lead-gen: replace ROAS with Cost Per Lead */
+            <KpiCard
+              label="Cost Per Lead"
+              value={
+                leadGenCpl != null ? (
+                  <span className="text-blue-500 dark:text-blue-400">{formatCurrency(leadGenCpl)}</span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )
+              }
+              sub={
+                leadGenLeads > 0 ? (
+                  <span className="text-xs text-muted-foreground">{leadGenLeads.toLocaleString()} leads · total spend ÷ leads</span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">No leads recorded this period</span>
+                )
+              }
+            />
+          ) : portfolioMtdRoas != null ? (
             <KpiCard
               label="MTD ROAS"
               value={
@@ -749,12 +790,77 @@ function HealthSummaryCards({
         </div>
       </div>
 
-      {/* Row 2 — Supporting metrics + Revenue */}
+      {/* Row 2 — Lead KPIs (lead-gen) or Supporting Metrics + Revenue (ecomm) */}
       <div>
         <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2 px-1">
-          Supporting Metrics
+          {isLeadGenView ? "Lead Performance" : "Supporting Metrics"}
         </p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {isLeadGenView ? (
+            <>
+              {/* Leads MTD — primary KPI for lead-gen accounts */}
+              <KpiCard
+                label="Leads MTD"
+                highlight
+                value={
+                  leadGenLeads > 0 ? (
+                    <span className="text-foreground">{leadGenLeads.toLocaleString()}</span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )
+                }
+                sub={
+                  leadGenLeadsChange != null ? (
+                    <StatChange change={leadGenLeadsChange} label="MoM" />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">from Meta campaigns</span>
+                  )
+                }
+              />
+
+              {/* Cost Per Lead */}
+              <KpiCard
+                label="Cost Per Lead"
+                value={
+                  leadGenCpl != null ? (
+                    <span className="text-blue-500 dark:text-blue-400">{formatCurrency(leadGenCpl)}</span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )
+                }
+                sub={<span className="text-xs text-muted-foreground">total spend ÷ leads</span>}
+              />
+
+              {/* Lead Conversion Rate */}
+              <KpiCard
+                label="Lead Conv. Rate"
+                value={
+                  leadGenCvr != null ? (
+                    <span className={leadGenCvr >= 5 ? "text-emerald-500" : "text-foreground"}>
+                      {leadGenCvr.toFixed(2)}%
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )
+                }
+                sub={<span className="text-xs text-muted-foreground">leads ÷ sessions</span>}
+              />
+
+              {/* Sessions — context metric */}
+              <KpiCard
+                label="MTD Sessions"
+                value={
+                  leadGenSessions > 0 ? (
+                    leadGenSessions.toLocaleString()
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )
+                }
+                sub={<span className="text-xs text-muted-foreground">from Google Analytics</span>}
+              />
+            </>
+          ) : (
+            <>
           <KpiCard
             label="MTD Leads"
             value={
@@ -813,6 +919,8 @@ function HealthSummaryCards({
               paidLeads={estYtdPaidLeads}
               vertical={estVertical}
             />
+          )}
+            </>
           )}
         </div>
       </div>
