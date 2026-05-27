@@ -85,14 +85,11 @@ export async function fetchMetaAdsMetrics(
     )
     .reduce((sum: number, a: any) => sum + parseFloat(a.value ?? "0"), 0);
 
-  // Leads: count of lead actions (lead gen clients)
-  const leads = (data.actions ?? [])
-    .filter((a: any) =>
-      ["lead", "offsite_conversion.fb_pixel_lead", "onsite_conversion.lead_grouped"].includes(
-        a.action_type
-      )
-    )
-    .reduce((sum: number, a: any) => sum + parseInt(a.value ?? "0", 10), 0);
+  // Leads: use only the "lead" umbrella action type — it already includes
+  // offsite_conversion.fb_pixel_lead and onsite_conversion.lead_grouped as sub-types.
+  // Summing sub-types alongside the parent causes double-counting.
+  const leadAction = (data.actions ?? []).find((a: any) => a.action_type === "lead");
+  const leads = leadAction ? parseInt(leadAction.value ?? "0", 10) : 0;
 
   // Purchases: count of purchase actions (ecommerce/rental clients like ERS)
   const purchases = (data.actions ?? [])
