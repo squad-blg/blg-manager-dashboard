@@ -440,6 +440,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Meta raw actions debug — returns every action type + value for a date range
+  // GET /api/debug/meta/:clientId?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+  app.get("/api/debug/meta/:clientId", async (req, res) => {
+    const client = storage.getClient(req.params.clientId);
+    if (!client?.metaAdAccountId) return res.status(400).json({ error: "No Meta account ID" });
+    const metaCreds = storage.getCredentials().find((c) => c.service === "meta_token");
+    if (!metaCreds) return res.status(400).json({ error: "Meta token not configured" });
+    const { startDate = "2026-05-01", endDate = "2026-05-27" } = req.query as Record<string, string>;
+    try {
+      const axios = (await import("axios")).default;
+      const accountId = client.metaAdAccountId.startsWith("act_")
+        ? client.metaAdAccountId : `act_${client.metaAdAccountId}`;
+      const r = await axios.get(`https://graph.facebook.com/v19.0/${accountId}/insights`, {
+        params: {
+          access_token: metaCreds.key,
+          fields: "spend,actions,action_values",
+          time_range: JSON.stringify({ since: startDate, until: endDate }),
+          level: "account",
+          action_report_time: "conversion",
+        },
+        timeout: 20_000,
+      });
+      const data = r.data?.data?.[0] ?? {};
+      res.json({
+        adAccountId: client.metaAdAccountId,
+        clientName: client.name,
+        platform: client.platform,
+        period: `${startDate} → ${endDate}`,
+        spend: data.spend,
+        actions: (data.actions ?? []).sort((a: any, b: any) => parseFloat(b.value) - parseFloat(a.value)),
+        action_values: data.action_values ?? [],
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message, details: e.response?.data });
+    }
+  });
+
   // Meta Ads live fetch proxy
   app.post("/api/fetch/meta/:clientId", async (req, res) => {
     const client = storage.getClient(req.params.clientId);
