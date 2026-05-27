@@ -154,7 +154,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             // Meta Ads
             if (metaCreds && client.metaAdAccountId) {
               try {
-                const m2 = await fetchMetaAdsMetrics(client.metaAdAccountId, metaCreds.key, startDate, endDate);
+                const m2 = await fetchMetaAdsMetrics(client.metaAdAccountId, metaCreds.key, startDate, endDate, client.platform === "LEADGEN");
                 const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === period);
                 const googleSpend = existing?.googleAdSpend ?? 0;
                 const metaPurchases = m2.purchases ?? 0;
@@ -293,7 +293,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             // Meta Ads
             if (metaCreds && client.metaAdAccountId) {
               try {
-                const m2 = await fetchMetaAdsMetrics(client.metaAdAccountId, metaCreds.key, startDate, endDate);
+                const m2 = await fetchMetaAdsMetrics(client.metaAdAccountId, metaCreds.key, startDate, endDate, client.platform === "LEADGEN");
                 const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === period);
                 const googleSpend = existing?.googleAdSpend ?? 0;
                 const metaPurchases = m2.purchases ?? 0;
@@ -456,7 +456,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         client.metaAdAccountId,
         metaCreds.key,
         startDate,
-        endDate
+        endDate,
+        client.platform === "LEADGEN",
       );
       res.json(metrics);
     } catch (e: any) {
@@ -603,7 +604,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           // ── Meta Ads ───────────────────────────────────────────────────
           if (metaCreds && client.metaAdAccountId) {
             try {
-              const m = await fetchMetaAdsMetrics(client.metaAdAccountId, metaCreds.key, startDate, endDate);
+              const m = await fetchMetaAdsMetrics(client.metaAdAccountId, metaCreds.key, startDate, endDate, client.platform === "LEADGEN");
               const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === targetPeriod);
               // Store Meta spend separately; combine with googleAdSpend for total — no compounding
               const googleSpend = existing?.googleAdSpend ?? 0;

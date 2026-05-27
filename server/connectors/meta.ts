@@ -24,16 +24,22 @@ export interface MetaAdsMetrics {
 }
 
 /**
- * @param adAccountId  Format: act_XXXXXXXXX  (include the "act_" prefix)
- * @param accessToken  Long-lived Meta access token
- * @param startDate    YYYY-MM-DD
- * @param endDate      YYYY-MM-DD
+ * @param adAccountId          Format: act_XXXXXXXXX  (include the "act_" prefix)
+ * @param accessToken          Long-lived Meta access token
+ * @param startDate            YYYY-MM-DD
+ * @param endDate              YYYY-MM-DD
+ * @param useDefaultAttribution  When true, omits attribution window overrides so the API
+ *                               returns the same lead counts shown in Meta Ads Manager
+ *                               (account default: 7-day click + 1-day view).
+ *                               Use for LEADGEN clients. Default false keeps 7d_click-only
+ *                               to prevent view-through inflation on purchase metrics.
  */
 export async function fetchMetaAdsMetrics(
   adAccountId: string,
   accessToken: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  useDefaultAttribution = false,
 ): Promise<MetaAdsMetrics> {
   // Ensure the account ID has the required act_ prefix
   const accountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
@@ -44,20 +50,24 @@ export async function fetchMetaAdsMetrics(
     "actions",
   ].join(",");
 
+  const params: Record<string, string> = {
+    access_token: accessToken,
+    fields,
+    time_range: JSON.stringify({ since: startDate, until: endDate }),
+    level: "account",
+    action_report_time: "conversion",
+  };
+
+  // For purchase-based accounts (ERS, IO, ecomm) keep 7d_click only to avoid
+  // inflating purchase counts with view-through conversions.
+  // For lead gen accounts, omit the override so counts match Meta Ads Manager.
+  if (!useDefaultAttribution) {
+    params.action_attribution_windows = JSON.stringify(["7d_click"]);
+    params.use_unified_attribution_setting = "false";
+  }
+
   const res = await axios.get(`${BASE}/${accountId}/insights`, {
-    params: {
-      access_token: accessToken,
-      fields,
-      time_range: JSON.stringify({ since: startDate, until: endDate }),
-      level: "account",
-      // Use 7-day click attribution only — excludes view-through conversions
-      // which inflate purchase counts since a view is not a purchase
-      // Force click-only attribution and disable statistical modeling
-      // Meta's default includes 1-day view + modeled conversions which inflates counts
-      action_attribution_windows: JSON.stringify(["7d_click"]),
-      use_unified_attribution_setting: "false",
-      action_report_time: "conversion",
-    },
+    params,
     timeout: 20_000,
   });
 
