@@ -122,6 +122,8 @@ const migrations = [
   `ALTER TABLE analytics_snapshots ADD COLUMN meta_ad_spend REAL`,
   `ALTER TABLE clients ADD COLUMN agency_analytics_url TEXT`,
   `ALTER TABLE clients ADD COLUMN io_location_id TEXT`,
+  `ALTER TABLE clients ADD COLUMN ghl_location_id TEXT`,
+  `ALTER TABLE clients ADD COLUMN ghl_api_key TEXT`,
 ];
 for (const sql of migrations) {
   try { sqlite.exec(sql); } catch { /* column already exists */ }
@@ -180,6 +182,22 @@ try {
   }
 } catch (e: any) {
   console.error('[startup] Data fix v2 error:', e.message);
+}
+
+// Data fix v3 — store GHL credentials for 1858 (survey submits as lead source)
+try {
+  const fixed = sqlite.prepare("SELECT key FROM api_credentials WHERE id = 'data_fix_v3'").get();
+  if (!fixed) {
+    sqlite.prepare(
+      "UPDATE clients SET ghl_location_id = 'Dv35qx82aEeO3TDRDRSO', ghl_api_key = 'pit-42d6c6cd-56c6-4f38-a444-9d995ed7becf' WHERE name = '1858'"
+    ).run();
+    sqlite.prepare(
+      "INSERT INTO api_credentials (id, service, key, label, updated_at) VALUES ('data_fix_v3', 'system', '1', 'Data fix v3 applied', datetime('now'))"
+    ).run();
+    console.log('[startup] Data fix v3 applied — 1858 GHL credentials set.');
+  }
+} catch (e: any) {
+  console.error('[startup] Data fix v3 error:', e.message);
 }
 
 export interface IStorage {

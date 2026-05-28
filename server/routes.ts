@@ -12,6 +12,7 @@ import { fetchMetaAdsMetrics, refreshMetaToken } from "./connectors/meta";
 import { fetchERSMetrics } from "./connectors/ers";
 import { fetchSheetsRevenue } from "./connectors/googlesheets";
 import { fetchIOMetrics } from "./connectors/io";
+import { fetchGHLSurveySubmits } from "./connectors/ghl";
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -170,6 +171,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   impressions: existing?.impressions ?? 0, clicks: existing?.clicks ?? 0, fetchedAt,
                 });
               } catch (e: any) { console.error(`[backfill] ${client.name} Meta ${period}:`, e.message); }
+            }
+
+            // GHL Survey Submissions — overrides Meta lead count for GHL clients
+            if (client.ghlLocationId && client.ghlApiKey) {
+              try {
+                const ghl = await fetchGHLSurveySubmits(client.ghlApiKey, client.ghlLocationId, startDate, endDate);
+                const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === period);
+                const totalSpend = existing?.adSpend ?? 0;
+                storage.upsertAnalyticsSnapshot({
+                  clientId: client.id, period, periodType: "month",
+                  googleAdSpend: existing?.googleAdSpend ?? 0,
+                  metaAdSpend: existing?.metaAdSpend ?? 0,
+                  adSpend: totalSpend,
+                  leads: ghl.surveySubmits,
+                  costPerLead: ghl.surveySubmits > 0 && totalSpend > 0
+                    ? Math.round((totalSpend / ghl.surveySubmits) * 100) / 100
+                    : (existing?.costPerLead ?? 0),
+                  sessions: existing?.sessions ?? 0,
+                  conversions: existing?.conversions ?? 0,
+                  conversionRate: existing?.conversionRate ?? 0,
+                  impressions: existing?.impressions ?? 0,
+                  clicks: existing?.clicks ?? 0,
+                  fetchedAt,
+                });
+                console.log(`[backfill] ${client.name} GHL ${period}: surveySubmits=${ghl.surveySubmits}`);
+              } catch (e: any) { console.error(`[backfill] ${client.name} GHL ${period}:`, e.message); }
             }
 
             console.log(`[backfill] ${client.name} ${period} done`);
@@ -672,6 +699,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               console.log(`[sync] ${client.name} Meta: spend=$${m.adSpend} leads=${leads} purchases=${metaPurchases} metaConversions=${metaConversions} (google=$${googleSpend} meta=$${m.adSpend} total=$${totalSpend})`);
             } catch (e: any) {
               console.error(`[sync] ${client.name} Meta:`, e.message, e.response?.data ? JSON.stringify(e.response.data).slice(0,500) : '');
+            }
+          }
+
+          // ── GHL Survey Submissions (overrides Meta lead count for GHL clients) ──
+          if (client.ghlLocationId && client.ghlApiKey) {
+            try {
+              const ghl = await fetchGHLSurveySubmits(client.ghlApiKey, client.ghlLocationId, startDate, endDate);
+              const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === targetPeriod);
+              const totalSpend = existing?.adSpend ?? 0;
+              storage.upsertAnalyticsSnapshot({
+                clientId: client.id, period: targetPeriod, periodType: "month",
+                googleAdSpend: existing?.googleAdSpend ?? 0,
+                metaAdSpend: existing?.metaAdSpend ?? 0,
+                adSpend: totalSpend,
+                // GHL survey submits are the authoritative lead count — override Meta conversions
+                leads: ghl.surveySubmits,
+                costPerLead: ghl.surveySubmits > 0 && totalSpend > 0
+                  ? Math.round((totalSpend / ghl.surveySubmits) * 100) / 100
+                  : (existing?.costPerLead ?? 0),
+                sessions: existing?.sessions ?? 0,
+                conversions: existing?.conversions ?? 0,
+                conversionRate: existing?.conversionRate ?? 0,
+                impressions: existing?.impressions ?? 0,
+                clicks: existing?.clicks ?? 0,
+                fetchedAt,
+              });
+              console.log(`[sync] ${client.name} GHL: surveySubmits=${ghl.surveySubmits} (overrides Meta lead count)`);
+            } catch (e: any) {
+              console.error(`[sync] ${client.name} GHL:`, e.message, e.response?.data ?? "");
             }
           }
         } catch (e: any) {

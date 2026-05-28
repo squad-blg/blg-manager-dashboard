@@ -44,6 +44,9 @@ export const clients = sqliteTable("clients", {
   // Google Sheets revenue source
   sheetsSpreadsheetId: text("sheets_spreadsheet_id"), // Google Sheets document ID
   sheetsCell: text("sheets_cell"),                     // A1 notation e.g. "Summary!V1"
+  // Go High Level — leads from survey submissions
+  ghlLocationId: text("ghl_location_id"), // GHL location ID (from dashboard URL)
+  ghlApiKey: text("ghl_api_key"),         // GHL Private Integration Token (pit-...)
 });
 
 export const insertClientSchema = createInsertSchema(clients).omit({ id: true });
