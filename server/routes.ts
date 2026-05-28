@@ -808,14 +808,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Note: ytdRevenue also scoped to selected period below
       const ytdChange = pct(ytdSpendCurrent, ytdSpendPrior);
 
-      // ── Revenue (context only, no trends) ─────────────────────────────────
-      const mtdRevSnap = monthlyRevenue.find(r => r.period === currentPeriod);
+      // ── Revenue + YoY/YTD trends ──────────────────────────────────────────
+      const mtdRevSnap  = monthlyRevenue.find(r => r.period === currentPeriod);
+      const yoyRevSnap  = monthlyRevenue.find(r => r.period === yoyPeriod); // same month last year
+      const mtdRevenue  = mtdRevSnap?.revenue ?? 0;
+      const yoyRevenue  = yoyRevSnap?.revenue ?? 0;
+      // YoY: this month vs same month last year
+      const mtdRevenueChange = pct(mtdRevenue, yoyRevenue);
+
       const ytdRevenue = monthlyRevenue
         .filter(r => r.period.startsWith(ytdPrefixCurrent) && r.period <= currentPeriod)
         .reduce((s, r) => s + r.revenue, 0);
+      const ytdPriorRevenue = monthlyRevenue
+        .filter(r => r.period.startsWith(ytdPrefixPrior) && r.period <= yoyPeriod)
+        .reduce((s, r) => s + r.revenue, 0);
+      // YTD: Jan–this month vs Jan–same month last year
+      const ytdRevenueChange = pct(ytdRevenue, ytdPriorRevenue);
 
       // ── ROAS ──────────────────────────────────────────────────────────────
-      const mtdRevenue = mtdRevSnap?.revenue ?? 0;
       const mtdRoas = mtdSpend > 0 && mtdRevenue > 0
         ? Math.round((mtdRevenue / mtdSpend) * 100) / 100 : null;
       const ytdRoas = ytdSpendCurrent > 0 && ytdRevenue > 0
@@ -920,7 +930,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         },
         revenue: {
           mtd: mtdRevenue,
+          mtdPrior: yoyRevenue,
+          mtdChange: mtdRevenueChange,
           ytd: ytdRevenue,
+          ytdPrior: ytdPriorRevenue,
+          ytdChange: ytdRevenueChange,
           history: monthlyRevenue
             .filter(r => r.period.startsWith(String(cpYear)) || r.period.startsWith(String(cpYear - 1)))
             .sort((a, b) => a.period.localeCompare(b.period))
@@ -944,8 +958,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const totalYtdSpendPrior = summary.reduce((s, c) => s + c.ads.ytdSpendPrior, 0);
     const totalLeads        = summary.reduce((s, c) => s + c.ads.mtdLeads, 0);
     const totalSessions     = summary.reduce((s, c) => s + c.ads.mtdSessions, 0);
-    const totalMtdRevenue   = summary.reduce((s, c) => s + c.revenue.mtd, 0);
-    const totalYtdRevenue   = summary.reduce((s, c) => s + c.revenue.ytd, 0);
+    const totalMtdRevenue      = summary.reduce((s, c) => s + c.revenue.mtd, 0);
+    const totalMtdRevenuePrior = summary.reduce((s, c) => s + (c.revenue.mtdPrior ?? 0), 0);
+    const totalYtdRevenue      = summary.reduce((s, c) => s + c.revenue.ytd, 0);
+    const totalYtdRevenuePrior = summary.reduce((s, c) => s + (c.revenue.ytdPrior ?? 0), 0);
 
     // Portfolio ROAS
     const portfolioMtdRoas = totalMtdSpend > 0 && totalMtdRevenue > 0
@@ -968,7 +984,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         totalLeads,
         totalSessions,
         mtdRevenue: totalMtdRevenue,
+        mtdRevenueChange: pct(totalMtdRevenue, totalMtdRevenuePrior),
         ytdRevenue: totalYtdRevenue,
+        ytdRevenueChange: pct(totalYtdRevenue, totalYtdRevenuePrior),
         portfolioMtdRoas,
         portfolioYtdRoas,
         clientCount: clients.length,

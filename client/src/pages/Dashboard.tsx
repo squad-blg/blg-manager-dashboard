@@ -533,7 +533,9 @@ function HealthSummaryCards({
     totalLeads,
     totalSessions,
     mtdRevenue,
+    mtdRevenueChange,
     ytdRevenue,
+    ytdRevenueChange,
     portfolioMtdRoas,
     clientCount,
   } = dashboard.totals;
@@ -893,7 +895,12 @@ function HealthSummaryCards({
             <KpiCard
               label="Revenue MTD"
               value={formatCurrency(mtdRevenue)}
-              sub={<span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>}
+              sub={
+                <div className="space-y-1">
+                  <StatChange change={mtdRevenueChange} label="YoY" />
+                  <span className="block text-xs text-muted-foreground">from ERS / IO / CRM</span>
+                </div>
+              }
             />
           ) : (
             <EstimatedRevenueCard
@@ -909,7 +916,12 @@ function HealthSummaryCards({
             <KpiCard
               label="Revenue YTD"
               value={formatCurrency(ytdRevenue)}
-              sub={<span className="text-xs text-muted-foreground">from ERS / IO / CRM</span>}
+              sub={
+                <div className="space-y-1">
+                  <StatChange change={ytdRevenueChange} label="vs last year" />
+                  <span className="block text-xs text-muted-foreground">from ERS / IO / CRM</span>
+                </div>
+              }
             />
           ) : (
             <EstimatedRevenueCard

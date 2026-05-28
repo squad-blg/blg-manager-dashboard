@@ -481,7 +481,7 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                 onClick={() => handleSort("yoy")}
                 data-testid="sort-yoy"
               >
-                YoY <SortIcon field="yoy" />
+                Spend YoY <SortIcon field="yoy" />
               </th>
               <th
                 className={thClass}
