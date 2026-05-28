@@ -222,6 +222,32 @@ try {
   console.error('[startup] Data fix v3 error:', e.message);
 }
 
+// Data fix v5 — store GHL credentials for 9 additional LEADGEN clients
+try {
+  const fixed = sqlite.prepare("SELECT key FROM api_credentials WHERE id = 'data_fix_v5'").get();
+  if (!fixed) {
+    const ghlClients: Array<{ name: string; locationId: string; apiKey: string }> = [
+      { name: 'Good Morning Remodel',                  locationId: 'Hprid4vTaJ1nRJWl3EWU', apiKey: 'pit-04f09ad9-96c7-49ce-8b8f-31d23d637eff' },
+      { name: 'Legacy Construction and Remodeling',    locationId: '76SngQvFfw5a5AxNER3U', apiKey: 'pit-521e1eb9-73dc-4912-9f75-e3d1ee765c7c' },
+      { name: 'Michael James Remodeling',              locationId: 'pyBQC8mJPeFK4BkQmxQZ', apiKey: 'pit-d0de8975-35a7-445e-ae7a-b6480e0962c3' },
+      { name: 'Natural Stone Services',                locationId: 'nf54irdjlaBLVKq2Y1NH', apiKey: 'pit-11aa1770-92aa-4814-a69f-72d5949963f6' },
+      { name: 'Peak Academic Coaching',                locationId: 'DBzqpvA1PXZCW7TFWa1j', apiKey: 'pit-48c296a1-766a-4f04-82d3-db376693fc39' },
+      { name: 'Renfaye Lashes',                        locationId: 'awam0z7pIk6NlDZGULx7', apiKey: 'pit-a7ee9740-893e-4b45-903f-8a07abae6b16' },
+      { name: 'Southern Stoneworks',                   locationId: 'bWpsYndNV8k0AQPeGQop', apiKey: 'pit-6a758b17-a49e-4d35-8547-c8c057effc7a' },
+      { name: 'Zoom Room Fort Mill',                   locationId: '1h4cB1Nhie9X8LhjZ0Se', apiKey: 'pit-19deb63b-8330-47a6-9a5e-2f1414bfa8d6' },
+      { name: 'Zoom Room Sandy Springs',               locationId: '3xbXzKxo1V49EnmUAo8s', apiKey: 'pit-ee090f68-9d49-4f75-8707-b6d5251e0412' },
+    ];
+    const stmt = sqlite.prepare("UPDATE clients SET ghl_location_id = ?, ghl_api_key = ? WHERE name = ?");
+    for (const c of ghlClients) stmt.run(c.locationId, c.apiKey, c.name);
+    sqlite.prepare(
+      "INSERT INTO api_credentials (id, service, key, label, updated_at) VALUES ('data_fix_v5', 'system', '1', 'Data fix v5 applied — 9 GHL clients wired', datetime('now'))"
+    ).run();
+    console.log('[startup] Data fix v5 applied — GHL credentials set for 9 LEADGEN clients.');
+  }
+} catch (e: any) {
+  console.error('[startup] Data fix v5 error:', e.message);
+}
+
 export interface IStorage {
   getManagers(): schema.Manager[];
   getManager(id: string): schema.Manager | undefined;
