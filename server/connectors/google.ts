@@ -115,9 +115,14 @@ export async function fetchGoogleAdsMetrics(
 export interface GA4Metrics {
   sessions: number;
   totalUsers: number;
+  organicSessions: number;
+  organicConversions: number;
 }
 
 /**
+ * Fetches sessions, users, and Organic Search breakdowns from GA4.
+ * Uses a sessionDefaultChannelGroup dimension to separate organic from paid/direct/etc.
+ *
  * @param propertyId  GA4 numeric property ID (e.g. "123456789")
  */
 export async function fetchGA4Metrics(
@@ -131,7 +136,12 @@ export async function fetchGA4Metrics(
     url,
     {
       dateRanges: [{ startDate, endDate }],
-      metrics: [{ name: "sessions" }, { name: "totalUsers" }],
+      dimensions: [{ name: "sessionDefaultChannelGroup" }],
+      metrics: [
+        { name: "sessions" },
+        { name: "totalUsers" },
+        { name: "keyEvents" }, // organic goal completions (GA4 renamed "conversions" → "keyEvents")
+      ],
     },
     {
       headers: {
@@ -142,9 +152,23 @@ export async function fetchGA4Metrics(
     }
   );
 
-  const row = res.data?.rows?.[0]?.metricValues ?? [];
-  const sessions   = parseInt(row[0]?.value ?? "0", 10);
-  const totalUsers = parseInt(row[1]?.value ?? "0", 10);
-  console.log(`[ga4:${propertyId}] sessions=${sessions} totalUsers=${totalUsers}`);
-  return { sessions, totalUsers };
+  let sessions = 0, totalUsers = 0, organicSessions = 0, organicConversions = 0;
+
+  for (const row of res.data?.rows ?? []) {
+    const channel  = row.dimensionValues?.[0]?.value ?? "";
+    const rowSess  = parseInt(row.metricValues?.[0]?.value ?? "0", 10);
+    const rowUsers = parseInt(row.metricValues?.[1]?.value ?? "0", 10);
+    const rowConv  = parseInt(row.metricValues?.[2]?.value ?? "0", 10);
+
+    sessions   += rowSess;
+    totalUsers += rowUsers;
+
+    if (channel.toLowerCase().includes("organic search")) {
+      organicSessions    += rowSess;
+      organicConversions += rowConv;
+    }
+  }
+
+  console.log(`[ga4:${propertyId}] sessions=${sessions} organic=${organicSessions} organicConv=${organicConversions}`);
+  return { sessions, totalUsers, organicSessions, organicConversions };
 }

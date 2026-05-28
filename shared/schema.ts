@@ -15,7 +15,7 @@ export type InsertManager = z.infer<typeof insertManagerSchema>;
 export type Manager = typeof managers.$inferSelect;
 
 // Platform types
-export type PlatformType = "ERS" | "IO" | "ECOMM" | "LEADGEN" | "SHEETS";
+export type PlatformType = "ERS" | "IO" | "ECOMM" | "LEADGEN" | "SHEETS" | "SEO";
 
 // Clients
 export const clients = sqliteTable("clients", {
@@ -84,6 +84,8 @@ export const analyticsSnapshots = sqliteTable("analytics_snapshots", {
   metaAdSpend: real("meta_ad_spend"),     // Meta Ads spend (stored separately)
   costPerLead: real("cost_per_lead"),
   leads: integer("leads"),
+  organicSessions: integer("organic_sessions"),   // GA4 Organic Search sessions (SEO clients)
+  organicConversions: integer("organic_conversions"), // GA4 Organic conversions (SEO clients)
   fetchedAt: text("fetched_at").notNull(),
 });
 

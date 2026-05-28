@@ -59,6 +59,13 @@ export type AdMetrics = {
   conversionRate?: number;
   mtdRoas?: number | null;
   ytdRoas?: number | null;
+  // SEO organic metrics
+  mtdOrganicSessions?: number;
+  momOrganicSessions?: number;
+  yoyOrganicSessions?: number;
+  organicSessionsChange?: number | null;
+  organicSessionsYoYChange?: number | null;
+  mtdOrganicConversions?: number;
   history: AnalyticsSnapshot[];
 };
 
@@ -583,6 +590,18 @@ function HealthSummaryCards({
   const isLeadGenView = dashboard.clients.length > 0 &&
     dashboard.clients.every((c) => c.client.platform === "LEADGEN");
 
+  // ── SEO view detection ─────────────────────────────────────────────────────
+  // Activates when every visible client is SEO-only (platform = SEO).
+  const isSEOView = dashboard.clients.length > 0 &&
+    dashboard.clients.every((c) => c.client.platform === "SEO");
+
+  // SEO aggregated KPIs (organic sessions from GA4)
+  const seoOrganicSessions      = (dashboard.totals as any).totalOrganicSessions ?? 0;
+  const seoOrganicConversions   = (dashboard.totals as any).totalOrganicConversions ?? 0;
+  const seoOrganicSessionsMoM   = (dashboard.totals as any).organicSessionsMoMChange ?? null;
+  const seoOrganicSessionsYoY   = (dashboard.totals as any).organicSessionsYoYChange ?? null;
+  const seoTotalSessions        = dashboard.totals.totalSessions ?? 0;
+
   // Lead-gen aggregated KPIs
   const leadGenLeads    = dashboard.clients.reduce((s, c) => s + (getAdMetrics(c).leads    ?? 0), 0);
   const leadGenSessions = dashboard.clients.reduce((s, c) => s + (getAdMetrics(c).sessions ?? 0), 0);
@@ -665,12 +684,87 @@ function HealthSummaryCards({
 
   return (
     <div className="space-y-3" data-testid="health-summary">
-      {/* Row 1 — Ad Performance */}
+      {/* Row 1 — Ad Performance (or SEO Performance) */}
       <div>
         <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2 px-1">
-          Ad Performance
+          {isSEOView ? "SEO Performance" : "Ad Performance"}
         </p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {isSEOView ? (
+            <>
+              {/* Organic Sessions MTD */}
+              <KpiCard
+                label="Organic Sessions"
+                highlight
+                value={
+                  seoOrganicSessions > 0 ? (
+                    <span className="text-foreground">{seoOrganicSessions.toLocaleString()}</span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )
+                }
+                sub={
+                  <div className="space-y-1">
+                    <StatChange change={seoOrganicSessionsMoM} label="MoM" />
+                    <span className="block text-xs text-muted-foreground">from Google Analytics</span>
+                  </div>
+                }
+              />
+              {/* Sessions YoY */}
+              <KpiCard
+                label="Sessions YoY"
+                value={
+                  seoOrganicSessionsYoY != null ? (
+                    <StatChange change={seoOrganicSessionsYoY} label="vs last year" />
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )
+                }
+                sub={<span className="text-xs text-muted-foreground">organic search, same month LY</span>}
+              />
+              {/* Organic Conversions */}
+              <KpiCard
+                label="Organic Conversions"
+                value={
+                  seoOrganicConversions > 0 ? (
+                    seoOrganicConversions.toLocaleString()
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )
+                }
+                sub={<span className="text-xs text-muted-foreground">GA4 key events · organic only</span>}
+              />
+              {/* Portfolio Health (same as always) */}
+              <KpiCard
+                label="Portfolio Health"
+                value={
+                  <span>
+                    {clientCount}{" "}
+                    <span className="text-base font-medium text-muted-foreground">
+                      client{clientCount !== 1 ? "s" : ""}
+                    </span>
+                  </span>
+                }
+                sub={
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="flex items-center gap-1 text-xs font-semibold text-emerald-500">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                      {growing} growing
+                    </span>
+                    <span className="flex items-center gap-1 text-xs font-semibold text-amber-500">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                      {flat} flat
+                    </span>
+                    <span className="flex items-center gap-1 text-xs font-semibold text-red-500">
+                      <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                      {declining} down
+                    </span>
+                  </div>
+                }
+              />
+            </>
+          ) : (
+          <>
           <KpiCard
             label="MTD Spend"
             highlight
@@ -789,16 +883,37 @@ function HealthSummaryCards({
               sub={<span className="text-xs text-muted-foreground">No ad spend this period</span>}
             />
           )}
+          </>
+          )}
         </div>
       </div>
 
-      {/* Row 2 — Lead KPIs (lead-gen) or Supporting Metrics + Revenue (ecomm) */}
+      {/* Row 2 — SEO / Lead-gen / Supporting Metrics */}
       <div>
         <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2 px-1">
-          {isLeadGenView ? "Lead Performance" : "Supporting Metrics"}
+          {isSEOView ? "Organic Performance" : isLeadGenView ? "Lead Performance" : "Supporting Metrics"}
         </p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {isLeadGenView ? (
+          {isSEOView ? (
+            <>
+              {/* Total Sessions */}
+              <KpiCard
+                label="Total Sessions"
+                highlight
+                value={seoTotalSessions > 0 ? seoTotalSessions.toLocaleString() : <span className="text-muted-foreground">—</span>}
+                sub={<span className="text-xs text-muted-foreground">all channels · from Google Analytics</span>}
+              />
+              {/* Organic Conversions */}
+              <KpiCard
+                label="Organic Conversions"
+                value={seoOrganicConversions > 0 ? seoOrganicConversions.toLocaleString() : <span className="text-muted-foreground">—</span>}
+                sub={<span className="text-xs text-muted-foreground">GA4 key events · organic only</span>}
+              />
+              {/* Placeholder spacers — keep grid balanced */}
+              <div />
+              <div />
+            </>
+          ) : isLeadGenView ? (
             <>
               {/* Leads MTD — primary KPI for lead-gen accounts */}
               <KpiCard
@@ -933,7 +1048,7 @@ function HealthSummaryCards({
             />
           )}
             </>
-          )}
+          ) /* end isLeadGenView / regular */}
         </div>
       </div>
     </div>

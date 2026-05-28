@@ -124,6 +124,8 @@ const migrations = [
   `ALTER TABLE clients ADD COLUMN io_location_id TEXT`,
   `ALTER TABLE clients ADD COLUMN ghl_location_id TEXT`,
   `ALTER TABLE clients ADD COLUMN ghl_api_key TEXT`,
+  `ALTER TABLE analytics_snapshots ADD COLUMN organic_sessions INTEGER`,
+  `ALTER TABLE analytics_snapshots ADD COLUMN organic_conversions INTEGER`,
 ];
 for (const sql of migrations) {
   try { sqlite.exec(sql); } catch { /* column already exists */ }
@@ -182,6 +184,26 @@ try {
   }
 } catch (e: any) {
   console.error('[startup] Data fix v2 error:', e.message);
+}
+
+// Data fix v4 — mark SEO-only clients with platform = 'SEO'
+try {
+  const fixed = sqlite.prepare("SELECT key FROM api_credentials WHERE id = 'data_fix_v4'").get();
+  if (!fixed) {
+    const seoClients = [
+      'CSE Services', 'Curlys', 'Foundation Event Rentals', 'GA Supreme Remodeling',
+      "Granny's Rentals", 'Renfaye Lashes', 'Scrub Cleaning Company', 'Jump City',
+      'LightXP', 'All Fun Bouncing Inflatables',
+    ];
+    const stmt = sqlite.prepare("UPDATE clients SET platform = 'SEO' WHERE name = ?");
+    for (const name of seoClients) stmt.run(name);
+    sqlite.prepare(
+      "INSERT INTO api_credentials (id, service, key, label, updated_at) VALUES ('data_fix_v4', 'system', '1', 'Data fix v4 applied', datetime('now'))"
+    ).run();
+    console.log('[startup] Data fix v4 applied — 10 clients set to SEO platform.');
+  }
+} catch (e: any) {
+  console.error('[startup] Data fix v4 error:', e.message);
 }
 
 // Data fix v3 — store GHL credentials for 1858 (survey submits as lead source)

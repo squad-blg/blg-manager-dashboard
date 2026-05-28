@@ -131,11 +131,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 if (!hasOwnRevenuePlatform) {
                   storage.upsertRevenueSnapshot({ clientId: client.id, period, periodType: "month", revenue: ads.revenue, orderCount: ads.conversions, fetchedAt });
                 }
-                let sessions = 0;
+                let sessions = 0, organicSessions = 0, organicConversions = 0;
                 if (client.ga4PropertyId) {
                   try {
                     const ga4 = await fetchGA4Metrics(googleAccessToken, client.ga4PropertyId, startDate, endDate);
                     sessions = ga4.sessions;
+                    organicSessions = ga4.organicSessions;
+                    organicConversions = ga4.organicConversions;
                   } catch (e: any) { console.error(`[backfill] ${client.name} GA4 ${period}:`, e.message); }
                 }
                 const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === period);
@@ -144,7 +146,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   clientId: client.id, period, periodType: "month",
                   googleAdSpend: ads.adSpend, metaAdSpend: metaSpend,
                   adSpend: Math.round((ads.adSpend + metaSpend) * 100) / 100,
-                  sessions, conversions: ads.conversions,
+                  sessions, organicSessions, organicConversions,
+                  conversions: ads.conversions,
                   leads: existing?.leads ?? 0, costPerLead: existing?.costPerLead ?? 0,
                   conversionRate: existing?.conversionRate ?? 0,
                   impressions: existing?.impressions ?? 0, clicks: existing?.clicks ?? 0, fetchedAt,
@@ -171,6 +174,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   impressions: existing?.impressions ?? 0, clicks: existing?.clicks ?? 0, fetchedAt,
                 });
               } catch (e: any) { console.error(`[backfill] ${client.name} Meta ${period}:`, e.message); }
+            }
+
+            // SEO — GA4 only (organic sessions as primary metric)
+            if (client.platform === "SEO" && googleAccessToken && client.ga4PropertyId) {
+              try {
+                const ga4 = await fetchGA4Metrics(googleAccessToken, client.ga4PropertyId, startDate, endDate);
+                storage.upsertAnalyticsSnapshot({
+                  clientId: client.id, period, periodType: "month",
+                  sessions: ga4.sessions,
+                  organicSessions: ga4.organicSessions,
+                  organicConversions: ga4.organicConversions,
+                  googleAdSpend: 0, metaAdSpend: 0, adSpend: 0,
+                  leads: 0, costPerLead: 0, conversions: 0,
+                  conversionRate: 0, impressions: 0, clicks: 0,
+                  fetchedAt,
+                });
+                console.log(`[backfill] ${client.name} SEO/GA4 ${period}: sessions=${ga4.sessions} organic=${ga4.organicSessions}`);
+              } catch (e: any) { console.error(`[backfill] ${client.name} SEO/GA4 ${period}:`, e.message); }
             }
 
             // GHL Survey Submissions — overrides Meta lead count for GHL clients
@@ -296,11 +317,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 if (!hasOwnRevenuePlatform) {
                   storage.upsertRevenueSnapshot({ clientId: client.id, period, periodType: "month", revenue: ads.revenue, orderCount: ads.conversions, fetchedAt });
                 }
-                let sessions = 0;
+                let sessions = 0, organicSessions = 0, organicConversions = 0;
                 if (client.ga4PropertyId) {
                   try {
                     const ga4 = await fetchGA4Metrics(googleAccessToken, client.ga4PropertyId, startDate, endDate);
                     sessions = ga4.sessions;
+                    organicSessions = ga4.organicSessions;
+                    organicConversions = ga4.organicConversions;
                   } catch (e: any) { console.error(`[rebackfill] ${client.name} GA4 ${period}:`, e.message); }
                 }
                 const existing = storage.getAnalyticsSnapshots(client.id, "month").find(s => s.period === period);
@@ -308,7 +331,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   clientId: client.id, period, periodType: "month",
                   googleAdSpend: ads.adSpend, metaAdSpend: existing?.metaAdSpend ?? 0,
                   adSpend: Math.round((ads.adSpend + (existing?.metaAdSpend ?? 0)) * 100) / 100,
-                  sessions, conversions: ads.conversions,
+                  sessions, organicSessions, organicConversions,
+                  conversions: ads.conversions,
                   leads: existing?.leads ?? 0, costPerLead: existing?.costPerLead ?? 0,
                   conversionRate: existing?.conversionRate ?? 0,
                   impressions: existing?.impressions ?? 0, clicks: existing?.clicks ?? 0, fetchedAt,
@@ -456,12 +480,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         startDate,
         endDate
       );
-      let sessions = 0;
+      let sessions = 0, organicSessions = 0, organicConversions = 0;
       if (client.ga4PropertyId) {
         const ga4 = await fetchGA4Metrics(accessToken, client.ga4PropertyId, startDate, endDate);
         sessions = ga4.sessions;
+        organicSessions = ga4.organicSessions;
+        organicConversions = ga4.organicConversions;
       }
-      res.json({ ...adsMetrics, sessions });
+      res.json({ ...adsMetrics, sessions, organicSessions, organicConversions });
     } catch (e: any) {
       res.status(500).json({ error: e.message, details: e.response?.data });
     }
@@ -632,11 +658,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 storage.upsertRevenueSnapshot({ clientId: client.id, period: targetPeriod, periodType: "month", revenue: ads.revenue, orderCount: ads.conversions, fetchedAt });
               }
 
-              let sessions = 0;
+              let sessions = 0, organicSessions = 0, organicConversions = 0;
               if (client.ga4PropertyId) {
                 try {
                   const ga4 = await fetchGA4Metrics(googleAccessToken, client.ga4PropertyId, startDate, endDate);
                   sessions = ga4.sessions;
+                  organicSessions = ga4.organicSessions;
+                  organicConversions = ga4.organicConversions;
                 } catch (e: any) {
                   console.error(`[sync] ${client.name} GA4:`, e.message, e.response?.data ? JSON.stringify(e.response.data).slice(0,300) : '');
                 }
@@ -651,6 +679,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 metaAdSpend: metaSpend,
                 adSpend: totalSpend,
                 sessions,
+                organicSessions,
+                organicConversions,
                 conversions: ads.conversions,
                 leads: existing?.leads ?? 0,
                 costPerLead: existing?.costPerLead ?? 0,
@@ -699,6 +729,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               console.log(`[sync] ${client.name} Meta: spend=$${m.adSpend} leads=${leads} purchases=${metaPurchases} metaConversions=${metaConversions} (google=$${googleSpend} meta=$${m.adSpend} total=$${totalSpend})`);
             } catch (e: any) {
               console.error(`[sync] ${client.name} Meta:`, e.message, e.response?.data ? JSON.stringify(e.response.data).slice(0,500) : '');
+            }
+          }
+
+          // ── SEO — GA4 only (no ad spend, organic sessions are the primary metric) ──
+          if (client.platform === "SEO" && googleAccessToken && client.ga4PropertyId) {
+            try {
+              const ga4 = await fetchGA4Metrics(googleAccessToken, client.ga4PropertyId, startDate, endDate);
+              storage.upsertAnalyticsSnapshot({
+                clientId: client.id, period: targetPeriod, periodType: "month",
+                sessions: ga4.sessions,
+                organicSessions: ga4.organicSessions,
+                organicConversions: ga4.organicConversions,
+                googleAdSpend: 0, metaAdSpend: 0, adSpend: 0,
+                leads: 0, costPerLead: 0, conversions: 0,
+                conversionRate: 0, impressions: 0, clicks: 0,
+                fetchedAt,
+              });
+              console.log(`[sync] ${client.name} SEO/GA4: sessions=${ga4.sessions} organic=${ga4.organicSessions} conv=${ga4.organicConversions}`);
+            } catch (e: any) {
+              console.error(`[sync] ${client.name} SEO/GA4:`, e.message, e.response?.data ?? "");
             }
           }
 
@@ -893,6 +943,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const momLeads    = aMoM?.leads    ?? 0;
       const yoyLeads    = aYoY?.leads    ?? 0;
 
+      // ── Organic (SEO) metrics ─────────────────────────────────────────────
+      const mtdOrganicSessions    = aNow?.organicSessions    ?? 0;
+      const momOrganicSessions    = aMoM?.organicSessions    ?? 0;
+      const yoyOrganicSessions    = aYoY?.organicSessions    ?? 0;
+      const mtdOrganicConversions = aNow?.organicConversions ?? 0;
+
       // ── Churn risk: based on YoY ad spend trend + last touch ──────────────
       const lastTouchDaysAgo = client.lastTouchDate
         ? Math.floor((now.getTime() - new Date(client.lastTouchDate).getTime()) / (1000 * 60 * 60 * 24))
@@ -940,25 +996,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (client.platform === "IO") {
         if (!client.ioApiKey)   missing.ioApiKey    = "IO API Key";
       }
-      // Google Ads
-      if (!client.googleAdsCustomerId) {
-        missing.googleAdsCustomerId = "Google Ads Customer ID";
-      } else if (!hasGlobalGoogle) {
-        missing.googleOAuth = "Google OAuth (configure in Settings)";
-      }
-      // GA4
-      if (!client.ga4PropertyId) {
-        missing.ga4PropertyId = "GA4 Property ID";
-      }
-      // Meta
-      if (!client.metaAdAccountId) {
-        missing.metaAdAccountId = "Meta Ad Account ID";
-      } else if (!hasGlobalMeta) {
-        missing.metaToken = "Meta Access Token (configure in Settings)";
-      }
-      // Agency Analytics
-      if (!client.aaaCampaignId) {
-        missing.aaaCampaignId = "Agency Analytics Campaign ID";
+      // SEO clients only need GA4 — skip all ad-platform credential checks
+      if (client.platform === "SEO") {
+        if (!client.ga4PropertyId) missing.ga4PropertyId = "GA4 Property ID";
+      } else {
+        // Google Ads
+        if (!client.googleAdsCustomerId) {
+          missing.googleAdsCustomerId = "Google Ads Customer ID";
+        } else if (!hasGlobalGoogle) {
+          missing.googleOAuth = "Google OAuth (configure in Settings)";
+        }
+        // GA4
+        if (!client.ga4PropertyId) {
+          missing.ga4PropertyId = "GA4 Property ID";
+        }
+        // Meta
+        if (!client.metaAdAccountId) {
+          missing.metaAdAccountId = "Meta Ad Account ID";
+        } else if (!hasGlobalMeta) {
+          missing.metaToken = "Meta Access Token (configure in Settings)";
+        }
+        // Agency Analytics
+        if (!client.aaaCampaignId) {
+          missing.aaaCampaignId = "Agency Analytics Campaign ID";
+        }
       }
 
       return {
@@ -980,6 +1041,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           yoyLeads,
           leadsYoyChange: pct(mtdLeads, yoyLeads),
           mtdSessions,
+          mtdOrganicSessions,
+          momOrganicSessions,
+          yoyOrganicSessions,
+          organicSessionsChange: pct(mtdOrganicSessions, momOrganicSessions),
+          organicSessionsYoYChange: pct(mtdOrganicSessions, yoyOrganicSessions),
+          mtdOrganicConversions,
           mtdRoas,
           ytdRoas,
           history,
@@ -1012,8 +1079,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const totalYoySpend     = summary.reduce((s, c) => s + c.ads.yoySpend, 0);
     const totalYtdSpend     = summary.reduce((s, c) => s + c.ads.ytdSpend, 0);
     const totalYtdSpendPrior = summary.reduce((s, c) => s + c.ads.ytdSpendPrior, 0);
-    const totalLeads        = summary.reduce((s, c) => s + c.ads.mtdLeads, 0);
-    const totalSessions     = summary.reduce((s, c) => s + c.ads.mtdSessions, 0);
+    const totalLeads           = summary.reduce((s, c) => s + c.ads.mtdLeads, 0);
+    const totalSessions        = summary.reduce((s, c) => s + c.ads.mtdSessions, 0);
+    const totalOrganicSessions     = summary.reduce((s, c) => s + c.ads.mtdOrganicSessions, 0);
+    const totalMomOrganicSessions  = summary.reduce((s, c) => s + c.ads.momOrganicSessions, 0);
+    const totalYoyOrganicSessions  = summary.reduce((s, c) => s + c.ads.yoyOrganicSessions, 0);
+    const totalOrganicConversions  = summary.reduce((s, c) => s + c.ads.mtdOrganicConversions, 0);
     const totalMtdRevenue      = summary.reduce((s, c) => s + c.revenue.mtd, 0);
     const totalMtdRevenuePrior = summary.reduce((s, c) => s + (c.revenue.mtdPrior ?? 0), 0);
     const totalYtdRevenue      = summary.reduce((s, c) => s + c.revenue.ytd, 0);
@@ -1039,6 +1110,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ytdChange: pct(totalYtdSpend, totalYtdSpendPrior),
         totalLeads,
         totalSessions,
+        totalOrganicSessions,
+        organicSessionsMoMChange: pct(totalOrganicSessions, totalMomOrganicSessions),
+        organicSessionsYoYChange: pct(totalOrganicSessions, totalYoyOrganicSessions),
+        totalOrganicConversions,
         mtdRevenue: totalMtdRevenue,
         mtdRevenueChange: pct(totalMtdRevenue, totalMtdRevenuePrior),
         ytdRevenue: totalYtdRevenue,

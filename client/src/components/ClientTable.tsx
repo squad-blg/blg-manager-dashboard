@@ -374,6 +374,8 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
 
   // True when every visible client is leads-based (no e-commerce revenue CRM)
   const isLeadGenView = clients.length > 0 && clients.every((c) => c.client.platform === "LEADGEN");
+  // True when every visible client is SEO-only
+  const isSEOView = clients.length > 0 && clients.every((c) => c.client.platform === "SEO");
 
   const sorted = [...clients].sort((a, b) => {
     let va: number | string = 0;
@@ -474,36 +476,36 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                 onClick={() => handleSort("mom")}
                 data-testid="sort-mom"
               >
-                MoM <SortIcon field="mom" />
+                {isSEOView ? "Sessions MoM" : "MoM"} <SortIcon field="mom" />
               </th>
               <th
                 className={thClass}
                 onClick={() => handleSort("yoy")}
                 data-testid="sort-yoy"
               >
-                Spend YoY <SortIcon field="yoy" />
+                {isSEOView ? "Sessions YoY" : "Spend YoY"} <SortIcon field="yoy" />
               </th>
               <th
                 className={thClass}
                 onClick={() => handleSort("ytdSpend")}
                 data-testid="sort-ytdspend"
               >
-                YTD Spend <SortIcon field="ytdSpend" />
+                {isSEOView ? "Total Sessions" : "YTD Spend"} <SortIcon field="ytdSpend" />
               </th>
-              {/* Revenue (ecomm) or Leads (leadgen) */}
+              {/* Revenue (ecomm) | Leads (leadgen) | Org. Sessions (SEO) */}
               <th
                 className={thClass}
                 onClick={() => handleSort("revenue")}
                 data-testid="sort-revenue"
               >
-                {isLeadGenView ? "Leads MTD" : "Revenue MTD"} <SortIcon field="revenue" />
+                {isLeadGenView ? "Leads MTD" : isSEOView ? "Org. Sessions" : "Revenue MTD"} <SortIcon field="revenue" />
               </th>
               <th
                 className={thClass}
                 onClick={() => handleSort("roas")}
                 data-testid="sort-roas"
               >
-                {isLeadGenView ? "CPL" : "ROAS"} <SortIcon field="roas" />
+                {isLeadGenView ? "CPL" : isSEOView ? "Conv." : "ROAS"} <SortIcon field="roas" />
               </th>
               <th
                 className={thClass}
@@ -581,37 +583,65 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                     </td>
                   )}
 
-                  {/* MTD Spend */}
+                  {/* MTD Spend — SEO clients have no ad spend */}
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
-                    {(analytics?.adSpend ?? 0) > 0 ? (
+                    {client.platform === "SEO" ? (
+                      <span className="text-xs text-muted-foreground">SEO only</span>
+                    ) : (analytics?.adSpend ?? 0) > 0 ? (
                       formatCurrency(analytics.adSpend)
                     ) : (
                       <span className="text-muted-foreground text-sm">—</span>
                     )}
                   </td>
 
-                  {/* MoM — spend direction is neutral, not success/danger */}
+                  {/* MoM — sessions MoM for SEO, spend MoM otherwise */}
                   <td className="px-4 py-3">
-                    <TrendBadge change={analytics.adSpendChange} neutral />
+                    {client.platform === "SEO" ? (
+                      <TrendBadge change={(analytics as any).organicSessionsChange ?? null} />
+                    ) : (
+                      <TrendBadge change={analytics.adSpendChange} neutral />
+                    )}
                   </td>
 
-                  {/* YoY — spend direction is neutral, not success/danger */}
+                  {/* YoY — sessions YoY for SEO, spend YoY otherwise */}
                   <td className="px-4 py-3">
-                    <TrendBadge change={analytics.yoyChange} neutral />
+                    {client.platform === "SEO" ? (
+                      <TrendBadge change={(analytics as any).organicSessionsYoYChange ?? null} />
+                    ) : (
+                      <TrendBadge change={analytics.yoyChange} neutral />
+                    )}
                   </td>
 
-                  {/* YTD Spend */}
+                  {/* YTD Spend — total sessions for SEO */}
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
-                    {(analytics.ytdSpend ?? 0) > 0 ? (
+                    {client.platform === "SEO" ? (
+                      (analytics?.sessions ?? 0) > 0 ? (
+                        <span>
+                          {(analytics.sessions!).toLocaleString()}
+                          <span className="text-xs text-muted-foreground font-normal ml-1">sessions</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )
+                    ) : (analytics.ytdSpend ?? 0) > 0 ? (
                       formatCurrency(analytics.ytdSpend!)
                     ) : (
                       <span className="text-muted-foreground text-sm">—</span>
                     )}
                   </td>
 
-                  {/* Revenue MTD (ecomm) — or Leads MTD for lead-gen clients */}
+                  {/* Revenue MTD (ecomm) | Leads MTD (leadgen) | Org. Sessions (SEO) */}
                   <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                    {client.platform === "LEADGEN" ? (
+                    {client.platform === "SEO" ? (
+                      (analytics as any).mtdOrganicSessions > 0 ? (
+                        <span className="font-semibold text-foreground">
+                          {((analytics as any).mtdOrganicSessions as number).toLocaleString()}
+                          <span className="text-xs text-muted-foreground font-normal ml-1">organic</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )
+                    ) : client.platform === "LEADGEN" ? (
                       analytics.leads != null && analytics.leads > 0 ? (
                         <span className="font-semibold text-foreground">
                           {analytics.leads.toLocaleString()}
@@ -629,9 +659,18 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                     )}
                   </td>
 
-                  {/* ROAS (ecomm) — or CPL for lead-gen clients */}
+                  {/* ROAS (ecomm) | CPL (leadgen) | Org. Conversions (SEO) */}
                   <td className="px-4 py-3 tabular-nums">
-                    {client.platform === "LEADGEN" ? (
+                    {client.platform === "SEO" ? (
+                      (analytics as any).mtdOrganicConversions > 0 ? (
+                        <span className="font-semibold text-emerald-500 dark:text-emerald-400">
+                          {((analytics as any).mtdOrganicConversions as number).toLocaleString()}
+                          <span className="text-xs text-muted-foreground font-normal ml-1">conv.</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )
+                    ) : client.platform === "LEADGEN" ? (
                       analytics.leads && analytics.leads > 0 && analytics.adSpend > 0 ? (
                         <span className="font-semibold text-blue-500 dark:text-blue-400">
                           {formatCurrency(analytics.adSpend / analytics.leads)}
