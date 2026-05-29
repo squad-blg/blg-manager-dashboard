@@ -440,9 +440,9 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
   }
 
   const thClass =
-    "px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap bg-muted/30";
+    "px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap bg-card";
   const thStatic =
-    "px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap bg-muted/30";
+    "px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap bg-card";
 
   return (
     <Card className="bg-card border border-border rounded-lg overflow-hidden">
@@ -454,7 +454,7 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
       </div>
       <div className="overflow-auto max-h-[calc(100vh-280px)]">
         <table className="w-full text-sm" data-testid="client-table">
-          <thead className="bg-muted/30 sticky top-0 z-10">
+          <thead className="bg-card sticky top-0 z-10 border-b border-border">
             <tr>
               <th
                 className={thClass}
