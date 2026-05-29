@@ -469,7 +469,7 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                 onClick={() => handleSort("mtdSpend")}
                 data-testid="sort-mtdspend"
               >
-                MTD Spend <SortIcon field="mtdSpend" />
+                {isSEOView ? "MTD Sessions" : "MTD Spend"} <SortIcon field="mtdSpend" />
               </th>
               <th
                 className={thClass}
@@ -505,7 +505,7 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                 onClick={() => handleSort("roas")}
                 data-testid="sort-roas"
               >
-                {isLeadGenView ? "CPL" : isSEOView ? "Conv." : "ROAS"} <SortIcon field="roas" />
+                {isLeadGenView ? "CPL" : isSEOView ? "Org. CVR" : "ROAS"} <SortIcon field="roas" />
               </th>
               <th
                 className={thClass}
@@ -593,7 +593,15 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                   {/* MTD Spend — SEO clients have no ad spend */}
                   <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
                     {client.platform === "SEO" ? (
-                      <span className="text-xs text-muted-foreground">SEO only</span>
+                      /* SEO: show total sessions MTD instead of empty "SEO only" */
+                      (analytics?.sessions ?? 0) > 0 ? (
+                        <span>
+                          <span className="font-semibold text-foreground">{analytics.sessions!.toLocaleString()}</span>
+                          <span className="text-xs text-muted-foreground font-normal ml-1">sessions</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )
                     ) : (analytics?.adSpend ?? 0) > 0 ? (
                       formatCurrency(analytics.adSpend)
                     ) : (
@@ -641,10 +649,17 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                   <td className="px-4 py-3 tabular-nums text-muted-foreground">
                     {client.platform === "SEO" ? (
                       (analytics as any).mtdOrganicSessions > 0 ? (
-                        <span className="font-semibold text-foreground">
-                          {((analytics as any).mtdOrganicSessions as number).toLocaleString()}
-                          <span className="text-xs text-muted-foreground font-normal ml-1">organic</span>
-                        </span>
+                        <div>
+                          <span className="font-semibold text-foreground">
+                            {((analytics as any).mtdOrganicSessions as number).toLocaleString()}
+                            <span className="text-xs text-muted-foreground font-normal ml-1">organic</span>
+                          </span>
+                          {(analytics as any).organicSessionsChange != null && (
+                            <div className="mt-0.5">
+                              <TrendBadge change={(analytics as any).organicSessionsChange} />
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-muted-foreground text-xs">—</span>
                       )
@@ -666,18 +681,33 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                     )}
                   </td>
 
-                  {/* ROAS (ecomm) | CPL (leadgen) | Org. Conversions (SEO) */}
+                  {/* ROAS (ecomm) | CPL (leadgen) | Org. CVR (SEO) */}
                   <td className="px-4 py-3 tabular-nums">
-                    {client.platform === "SEO" ? (
-                      (analytics as any).mtdOrganicConversions > 0 ? (
+                    {client.platform === "SEO" ? (() => {
+                      const convs = (analytics as any).mtdOrganicConversions as number ?? 0;
+                      const orgSess = (analytics as any).mtdOrganicSessions as number ?? 0;
+                      const cvr = orgSess > 0 && convs > 0
+                        ? Math.round((convs / orgSess) * 10000) / 100
+                        : null;
+                      return cvr != null ? (
+                        <div>
+                          <span className="font-semibold text-emerald-500 dark:text-emerald-400">
+                            {cvr.toFixed(2)}%
+                            <span className="text-xs text-muted-foreground font-normal ml-1">CVR</span>
+                          </span>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {convs.toLocaleString()} conv.
+                          </div>
+                        </div>
+                      ) : convs > 0 ? (
                         <span className="font-semibold text-emerald-500 dark:text-emerald-400">
-                          {((analytics as any).mtdOrganicConversions as number).toLocaleString()}
+                          {convs.toLocaleString()}
                           <span className="text-xs text-muted-foreground font-normal ml-1">conv.</span>
                         </span>
                       ) : (
                         <span className="text-muted-foreground text-xs">—</span>
-                      )
-                    ) : client.platform === "LEADGEN" ? (
+                      );
+                    })() : client.platform === "LEADGEN" ? (
                       analytics.leads && analytics.leads > 0 && analytics.adSpend > 0 ? (
                         <span className="font-semibold text-blue-500 dark:text-blue-400">
                           {formatCurrency(analytics.adSpend / analytics.leads)}
