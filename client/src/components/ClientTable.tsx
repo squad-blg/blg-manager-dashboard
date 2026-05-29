@@ -557,11 +557,21 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                           client.name
                         )}
                       </div>
-                      {client.location && (
-                        <div className="text-xs text-muted-foreground">
-                          {client.location}
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${
+                          client.platform === "SEO"     ? "bg-teal-500/15 text-teal-400" :
+                          client.platform === "LEADGEN" ? "bg-amber-500/15 text-amber-400" :
+                          client.platform === "IO"      ? "bg-blue-500/15 text-blue-400" :
+                          client.platform === "ERS"     ? "bg-violet-500/15 text-violet-400" :
+                          client.platform === "ECOMM"   ? "bg-pink-500/15 text-pink-400" :
+                                                          "bg-muted/40 text-muted-foreground"
+                        }`}>
+                          {client.platform}
+                        </span>
+                        {client.location && (
+                          <span className="text-xs text-muted-foreground">{client.location}</span>
+                        )}
+                      </div>
                     </div>
                   </td>
 
