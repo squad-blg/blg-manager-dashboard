@@ -49,7 +49,7 @@ export async function fetchGHLSurveySubmits(
 
     try {
       const res = await axios.get(`${BASE_URL}/surveys/submissions`, {
-        params: { locationId, startDate, endDate, page, limit },
+        params: { locationId, startAt: startDate, endAt: endDate, page, limit },
         headers: {
           Authorization: `Bearer ${apiKey}`,
           Version: GHL_VERSION,
