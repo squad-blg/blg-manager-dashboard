@@ -557,7 +557,7 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                           client.name
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 mt-1">
+                      <div className="mt-1">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide border ${
                           client.platform === "SEO"     ? "bg-teal-500/20 text-teal-400 border-teal-500/30" :
                           client.platform === "LEADGEN" ? "bg-amber-500/20 text-amber-400 border-amber-500/30" :
@@ -568,9 +568,6 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                         }`}>
                           {client.platform}
                         </span>
-                        {client.location && (
-                          <span className="text-xs text-muted-foreground">{client.location}</span>
-                        )}
                       </div>
                     </div>
                   </td>
