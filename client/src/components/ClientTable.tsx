@@ -452,7 +452,7 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
           {clients.length} client{clients.length !== 1 ? "s" : ""}
         </span>
       </div>
-      <div className="overflow-auto max-h-[calc(100vh-320px)]">
+      <div style={{ overflow: "auto", maxHeight: "calc(100vh - 280px)" }}>
         <table className="w-full text-sm" data-testid="client-table">
           <thead className="bg-card sticky top-0 z-10 border-b border-border">
             <tr>
@@ -557,14 +557,14 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
                           client.name
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${
-                          client.platform === "SEO"     ? "bg-teal-500/15 text-teal-400" :
-                          client.platform === "LEADGEN" ? "bg-amber-500/15 text-amber-400" :
-                          client.platform === "IO"      ? "bg-blue-500/15 text-blue-400" :
-                          client.platform === "ERS"     ? "bg-violet-500/15 text-violet-400" :
-                          client.platform === "ECOMM"   ? "bg-pink-500/15 text-pink-400" :
-                                                          "bg-muted/40 text-muted-foreground"
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide border ${
+                          client.platform === "SEO"     ? "bg-teal-500/20 text-teal-400 border-teal-500/30" :
+                          client.platform === "LEADGEN" ? "bg-amber-500/20 text-amber-400 border-amber-500/30" :
+                          client.platform === "IO"      ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
+                          client.platform === "ERS"     ? "bg-violet-500/20 text-violet-400 border-violet-500/30" :
+                          client.platform === "ECOMM"   ? "bg-pink-500/20 text-pink-400 border-pink-500/30" :
+                                                          "bg-muted/40 text-muted-foreground border-border"
                         }`}>
                           {client.platform}
                         </span>
