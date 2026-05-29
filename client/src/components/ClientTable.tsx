@@ -452,9 +452,9 @@ export default function ClientTable({ clients, managers, selectedManager }: Prop
           {clients.length} client{clients.length !== 1 ? "s" : ""}
         </span>
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-auto max-h-[calc(100vh-320px)]">
         <table className="w-full text-sm" data-testid="client-table">
-          <thead className="bg-card sticky top-[73px] z-[9] border-b border-border">
+          <thead className="bg-card sticky top-0 z-10 border-b border-border">
             <tr>
               <th
                 className={thClass}
