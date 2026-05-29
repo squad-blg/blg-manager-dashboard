@@ -1252,6 +1252,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(creds);
   });
 
+  // TEMPORARY — remove after retrieving meta token
+  app.get("/api/admin/meta-token", (_req, res) => {
+    const cred = storage.getCredentials().find((c) => c.service === "meta_token");
+    if (!cred) return res.status(404).json({ error: "meta_token not found" });
+    res.json({ meta_token: cred.key });
+  });
+
   app.post("/api/credentials", (req, res) => {
     const cred = storage.upsertCredential({
       ...req.body,
