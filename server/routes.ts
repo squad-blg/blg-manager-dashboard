@@ -1260,5 +1260,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ...cred, key: cred.key.slice(0, 4) + "••••••••" + cred.key.slice(-4) });
   });
 
+  // ── TEMP: credential discovery endpoints (remove after use) ──────────────────
+  app.get("/api/admin/discover/google", async (_req, res) => {
+    try {
+      const creds = storage.getCredentials();
+      const googleOAuth = creds.find(c => c.service === "google_oauth")?.key;
+      if (!googleOAuth) return res.status(400).json({ error: "Missing google_oauth credential" });
+      const [clientId, clientSecret, refreshToken] = googleOAuth.split("|");
+      const { getGoogleAccessToken } = await import("./connectors/google.js");
+      const accessToken = await getGoogleAccessToken(clientId, clientSecret, refreshToken);
+      const axios = (await import("axios")).default;
+      // List all GA4 properties via Analytics Admin API
+      const ga4 = await axios.get(
+        "https://analyticsadmin.googleapis.com/v1beta/accountSummaries",
+        { headers: { Authorization: `Bearer ${accessToken}` }, params: { pageSize: 200 } }
+      );
+      res.json({ ga4: ga4.data });
+    } catch(e: any) {
+      res.status(500).json({ error: e.message, details: e.response?.data });
+    }
+  });
+
+  app.get("/api/admin/discover/meta", async (_req, res) => {
+    try {
+      const token = storage.getCredentials().find(c => c.service === "meta_token")?.key;
+      if (!token) return res.status(400).json({ error: "No meta token" });
+      const axios = (await import("axios")).default;
+      const r = await axios.get(
+        `https://graph.facebook.com/v19.0/me/adaccounts`,
+        { params: { fields: "id,name,account_status", limit: 200, access_token: token } }
+      );
+      res.json(r.data);
+    } catch(e: any) {
+      res.status(500).json({ error: e.message, details: e.response?.data });
+    }
+  });
+  // ─────────────────────────────────────────────────────────────────────────────
+
   return httpServer;
 }
