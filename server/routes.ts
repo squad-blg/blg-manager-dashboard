@@ -430,6 +430,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // TEMP DEBUG: inspect raw IO lead object shape for a client
+  // GET /api/debug/io/:clientId — returns first 3 leads with all fields
+  app.get("/api/debug/io/:clientId", async (req, res) => {
+    const client = storage.getClient(req.params.clientId);
+    if (!client?.ioApiKey) return res.status(400).json({ error: "No IO API key" });
+    try {
+      const r = await axios.get("https://rental.software/api6/leads/", {
+        params: { apiKey: client.ioApiKey, offset: 0, limit: 3, _body: "true" },
+        timeout: 15_000,
+      });
+      const body = r.data;
+      const leads = Array.isArray(body) ? body : (body?.items ?? body?.leads ?? body);
+      res.json({ count: leads.length, sample: leads.slice(0, 3) });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message, status: e.response?.status });
+    }
+  });
+
   // IO Locations proxy — returns the list of locations for a given IO API key.
   // Used by the Clients form to populate the location picker without exposing
   // the API key to the browser.
