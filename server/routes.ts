@@ -1282,6 +1282,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         results[endpoint] = { error: e.message, status: e.response?.status, data: e.response?.data };
       }
     }
+    // Also fetch first 10 raw orders so we can inspect field names + values
+    try {
+      const r = await axios.post(`${base}/api/read/orders/`,
+        authBody({ start_date: startDate, end_date: endDate, num_rows: "10" }), { headers, timeout: 15_000 });
+      const body = r.data;
+      const inner = body?.data ?? body?.rows ?? body?.results ?? body?.orders ?? body;
+      const rows = Array.isArray(inner) ? inner : (typeof inner === "object" ? Object.values(inner) : []);
+      results["orders_sample"] = {
+        raw_keys: rows[0] ? Object.keys(rows[0]) : [],
+        first_3_rows: rows.slice(0, 3),
+        total_rows_returned: rows.length,
+        revenue_sum_from_total_field: rows.reduce((s: number, r: any) => s + parseFloat(String(r.total ?? r.grand_total ?? 0).replace(/[^0-9.-]/g, "") || "0"), 0),
+      };
+    } catch (e: any) {
+      results["orders_sample"] = { error: e.message };
+    }
     res.json({ client: client.name, startDate, endDate, results });
   });
 
