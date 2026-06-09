@@ -1260,6 +1260,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ...cred, key: cred.key.slice(0, 4) + "••••••••" + cred.key.slice(-4) });
   });
 
+  // TEMP: raw ERS debug — returns unprocessed API response for revenue audit
+  app.post("/api/admin/debug/ers/:clientId", async (req, res) => {
+    const client = storage.getClient(req.params.clientId);
+    if (!client || !client.ersFolder || !client.ersApiKey || !client.ersDevKey) {
+      return res.status(400).json({ error: "Not an ERS client or missing credentials" });
+    }
+    const { startDate = "2026-06-01", endDate = "2026-06-30" } = req.body;
+    const base = `https://${client.ersFolder}.ourers.com`;
+    const axios = (await import("axios")).default;
+    const authBody = (extra = {}) =>
+      new URLSearchParams({ key: client.ersDevKey!, token: client.ersApiKey!, ...extra }).toString();
+    const headers = { "Content-Type": "application/x-www-form-urlencoded" };
+    const results: Record<string, any> = {};
+    for (const endpoint of ["order_counts", "closeout", "insights", "payments"]) {
+      try {
+        const r = await axios.post(`${base}/api/${endpoint === "order_counts" ? "read" : "report"}/${endpoint}/`,
+          authBody({ start_date: startDate, end_date: endDate }), { headers, timeout: 15_000 });
+        results[endpoint] = r.data;
+      } catch (e: any) {
+        results[endpoint] = { error: e.message, status: e.response?.status, data: e.response?.data };
+      }
+    }
+    res.json({ client: client.name, startDate, endDate, results });
+  });
+
   // ── TEMP: credential discovery endpoints (remove after use) ──────────────────
   app.get("/api/admin/discover/google", async (_req, res) => {
     try {
