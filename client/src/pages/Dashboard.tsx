@@ -245,11 +245,15 @@ export default function Dashboard() {
   const aggregatedTotals = dashboard ? (() => {
     if (!selectedClient) return dashboard.totals;
     const clients = visibleClients;
+    const pctChange = (a: number, b: number): number | null =>
+      b === 0 ? null : Math.round(((a - b) / b) * 10000) / 100;
     const totalAdSpend = clients.reduce((s, c) => s + getAdMetrics(c).adSpend, 0);
     const totalSessions = clients.reduce((s, c) => s + (getAdMetrics(c).sessions ?? 0), 0);
     const totalLeads = clients.reduce((s, c) => s + (getAdMetrics(c).leads ?? 0), 0);
     const mtdRevenue = clients.reduce((s, c) => s + (c.revenue?.mtd ?? 0), 0);
+    const mtdRevenuePrior = clients.reduce((s, c) => s + (c.revenue?.mtdPrior ?? 0), 0);
     const ytdRevenue = clients.reduce((s, c) => s + (c.revenue?.ytd ?? 0), 0);
+    const ytdRevenuePrior = clients.reduce((s, c) => s + (c.revenue?.ytdPrior ?? 0), 0);
     const totalAdSpendPrior = clients.reduce((s, c) => s + (getAdMetrics(c).adSpendPrior ?? 0), 0);
     const portfolioMtdRoas = totalAdSpend > 0 && mtdRevenue > 0
       ? Math.round((mtdRevenue / totalAdSpend) * 100) / 100 : null;
@@ -263,7 +267,9 @@ export default function Dashboard() {
       totalSessions,
       totalLeads,
       mtdRevenue,
+      mtdRevenueChange: pctChange(mtdRevenue, mtdRevenuePrior),
       ytdRevenue,
+      ytdRevenueChange: pctChange(ytdRevenue, ytdRevenuePrior),
       portfolioMtdRoas,
       clientCount: clients.length,
     };
