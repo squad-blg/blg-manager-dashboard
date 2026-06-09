@@ -87,16 +87,17 @@ async function fetchIOLeadsRevenue(
       const isActive   = statusObj ? String(statusObj.isactive) !== "0" : true;
       if (!isActive || SKIP_STATUS_NAMES.has(statusName)) continue;
 
-      // IO event date field is "eventstarttime" (ISO string or Unix timestamp).
-      // Falls back to fullstart, then createtime. If no date is found, skip the lead
-      // rather than counting it unconditionally.
-      const rawDate = lead.eventstarttime ?? lead.fullstart ?? lead.createtime;
-      if (!rawDate) continue; // no date → can't filter → skip to avoid garbage data
-
-      const leadTs =
-        typeof rawDate === "number"
-          ? rawDate
-          : Math.floor(new Date(rawDate).getTime() / 1000);
+      // IO event date — prefer the pre-parsed Unix timestamp (_ts field) when available,
+      // otherwise parse the ISO string. Falls back to fullstart, then createtime.
+      // If no date is found, skip the lead rather than counting it unconditionally.
+      const leadTs: number | null =
+        lead.eventstarttime_ts != null ? Number(lead.eventstarttime_ts)
+        : lead.fullstart_ts     != null ? Number(lead.fullstart_ts)
+        : lead.eventstarttime   != null ? Math.floor(new Date(lead.eventstarttime).getTime() / 1000)
+        : lead.fullstart        != null ? Math.floor(new Date(lead.fullstart).getTime() / 1000)
+        : lead.createtime       != null ? Math.floor(new Date(lead.createtime).getTime() / 1000)
+        : null;
+      if (leadTs === null || isNaN(leadTs)) continue;
       if (leadTs < startTs || leadTs > endTs) continue;
 
       const total = parseFloat(
