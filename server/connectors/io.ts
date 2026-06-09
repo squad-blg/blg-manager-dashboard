@@ -1,15 +1,18 @@
 /**
  * Inflatable Office (IO) connector
  *
- * Primary:  GET /api6/stats  — requires "Overview Stats Full Access" subscription feature.
- * Fallback: GET /api6/leads/ — requires only "Leads" permission; sums the `total` field
- *           across all non-cancelled bookings in the date range.
+ * Revenue source: GET /api6/leads/ — paginates all leads in the date window,
+ * filters by event date client-side, sums the `total` field across non-cancelled bookings.
+ *
+ * NOTE: /api6/stats was previously used as the primary source, but it does NOT
+ * reliably filter by date range. For several accounts it returns cumulative all-time
+ * totals regardless of the start/end params, causing June-9 revenue to appear
+ * equal to a full month of May. The leads endpoint is the only accurate source.
  *
  * Base URL: https://rental.software/api6
  * Auth: ?apiKey=YOUR_KEY (query parameter)
  *
- * API docs: https://rental.software/support/knowledge-base/article/api-stats-retrieve-list
- *           https://rental.software/support/knowledge-base/article/api-leads-list
+ * API docs: https://rental.software/support/knowledge-base/article/api-leads-list
  */
 
 import axios from "axios";
@@ -26,10 +29,9 @@ const BASE_URL = "https://rental.software/api6";
 const SKIP_STATUSES = new Set(["cancelled", "canceled", "void", "declined"]);
 
 /**
- * Fallback when /api6/stats returns 403.
  * Paginates /api6/leads/, filters by event date, and sums the `total` field.
  * Passes start/end Unix timestamps — IO may support them even if undocumented;
- * if not, manual date filtering is applied per lead.
+ * manual date filtering is always applied per lead as a safety net.
  */
 async function fetchIOLeadsRevenue(
   apiKey: string,
@@ -46,7 +48,7 @@ async function fetchIOLeadsRevenue(
   let orderCount = 0;
   const MAX_PAGES = 20; // safety cap — up to 2 000 leads
 
-  console.log(`[io] Leads fallback ${startDate} → ${endDate}`);
+  console.log(`[io] Leads ${startDate} → ${endDate}`);
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const params: Record<string, string | number> = {
@@ -100,7 +102,7 @@ async function fetchIOLeadsRevenue(
     offset += limit;
   }
 
-  console.log(`[io] Leads fallback: revenue=$${totalRevenue.toFixed(2)} orders=${orderCount}`);
+  console.log(`[io] Leads: revenue=$${totalRevenue.toFixed(2)} orders=${orderCount}`);
   return { revenue: Math.round(totalRevenue * 100) / 100, orderCount };
 }
 
@@ -117,55 +119,24 @@ export async function fetchIOMetrics(
   endDate: string,
   locationId?: string | null
 ): Promise<IOMetrics> {
-  // Convert YYYY-MM-DD to Unix timestamps
-  const start = Math.floor(new Date(startDate + "T00:00:00Z").getTime() / 1000);
-  const end   = Math.floor(new Date(endDate   + "T23:59:59Z").getTime() / 1000);
-
   const locationSuffix = locationId ? ` (location ${locationId})` : "";
-  console.log(`[io] Fetching stats ${startDate} → ${endDate} (${start} → ${end})${locationSuffix}`);
+  console.log(`[io] Fetching ${startDate} → ${endDate} via leads${locationSuffix}`);
 
-  const params: Record<string, string> = {
-    apiKey,
-    start: String(start),
-    end:   String(end),
+  // Always use the leads endpoint for revenue.
+  //
+  // The /api6/stats endpoint does NOT reliably filter by date range — it returns
+  // cumulative all-time totals for some accounts regardless of start/end params.
+  // Confirmed: on June 9, Acadiana ($669K), Blue Line ($717K), Happily Ever After
+  // ($594K), and Jump High Jumpers ($435K) each showed June ≈ May (ratio ~1.00),
+  // which is impossible for 9 days vs a full month.
+  //
+  // The leads endpoint applies per-lead event-date filtering and is the only
+  // accurate source for date-bounded revenue.
+  const result = await fetchIOLeadsRevenue(apiKey, startDate, endDate, locationId);
+
+  return {
+    revenue:     result.revenue,
+    totalEvents: result.orderCount,
+    totalLeads:  0,
   };
-  if (locationId) params.locationid = locationId;
-
-  try {
-    const res = await axios.get(`${BASE_URL}/stats`, { params, timeout: 20_000 });
-
-    const data = res.data;
-    console.log(`[io] Stats response keys:`, Object.keys(data ?? {}));
-    console.log(`[io] Raw response:`, JSON.stringify(data).slice(0, 400));
-
-    // "Total Sales" comes back as "$3,238.67" — strip formatting
-    const rawSales = data?.["Total Sales"] ?? data?.["total_sales"] ?? "0";
-    const revenue = parseFloat(String(rawSales).replace(/[^0-9.-]/g, ""));
-
-    const totalEvents = parseInt(String(data?.["Total Events"] ?? "0").replace(/[^0-9]/g, ""), 10);
-    const totalLeads  = parseInt(String(data?.["Total Leads"]  ?? "0").replace(/[^0-9]/g, ""), 10);
-
-    console.log(`[io] revenue=$${revenue} events=${totalEvents} leads=${totalLeads}`);
-
-    return {
-      revenue:     isNaN(revenue)      ? 0 : Math.round(revenue * 100) / 100,
-      totalEvents: isNaN(totalEvents)  ? 0 : totalEvents,
-      totalLeads:  isNaN(totalLeads)   ? 0 : totalLeads,
-    };
-  } catch (e: any) {
-    // 403 = "Overview Stats Full Access Required" — subscription feature not enabled.
-    // Fall back to summing lead totals from /api6/leads/.
-    if (e.response?.status === 403) {
-      console.warn(`[io] Stats 403 (Overview Stats not enabled) — falling back to Leads endpoint`);
-      const fallback = await fetchIOLeadsRevenue(apiKey, startDate, endDate, locationId);
-      return {
-        revenue:     fallback.revenue,
-        totalEvents: fallback.orderCount,
-        totalLeads:  0,
-      };
-    }
-
-    console.error(`[io] Stats fetch failed:`, e.message, e.response?.data ?? "");
-    return { revenue: 0, totalEvents: 0, totalLeads: 0 };
-  }
 }
