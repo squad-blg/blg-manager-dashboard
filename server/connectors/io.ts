@@ -25,8 +25,12 @@ export interface IOMetrics {
 
 const BASE_URL = "https://rental.software/api6";
 
-/** Statuses that should NOT be counted toward revenue */
-const SKIP_STATUSES = new Set(["cancelled", "canceled", "void", "declined"]);
+/**
+ * Status names that should NOT be counted toward revenue.
+ * Note: lead.status is an object { id, name, isactive, ... } — compare against status.name.
+ * We also skip any status where isactive === "0" (e.g. "Temporary" / "Quote" / "Cancelled").
+ */
+const SKIP_STATUS_NAMES = new Set(["cancelled", "canceled", "void", "declined", "quote", "inquiry"]);
 
 /**
  * Paginates /api6/leads/, filters by event date, and sums the `total` field.
@@ -75,19 +79,25 @@ async function fetchIOLeadsRevenue(
     if (leads.length === 0) break;
 
     for (const lead of leads) {
-      // Skip non-revenue statuses
-      const status = String(lead.status ?? "").toLowerCase();
-      if (SKIP_STATUSES.has(status)) continue;
+      // IO lead.status is an object: { id, name, isactive, color, ... }
+      // Skip leads whose status is inactive (isactive === "0") — covers "Temporary",
+      // "Quote", draft states, etc. Also skip explicitly named non-revenue statuses.
+      const statusObj  = lead.status && typeof lead.status === "object" ? lead.status : null;
+      const statusName = String(statusObj?.name ?? lead.status ?? "").toLowerCase();
+      const isActive   = statusObj ? String(statusObj.isactive) !== "0" : true;
+      if (!isActive || SKIP_STATUS_NAMES.has(statusName)) continue;
 
-      // Resolve event date → Unix timestamp for manual range check
-      const rawDate = lead.startdate ?? lead.eventdate ?? lead.date ?? lead.created;
-      if (rawDate) {
-        const leadTs =
-          typeof rawDate === "number"
-            ? rawDate
-            : Math.floor(new Date(rawDate).getTime() / 1000);
-        if (leadTs < startTs || leadTs > endTs) continue;
-      }
+      // IO event date field is "eventstarttime" (ISO string or Unix timestamp).
+      // Falls back to fullstart, then createtime. If no date is found, skip the lead
+      // rather than counting it unconditionally.
+      const rawDate = lead.eventstarttime ?? lead.fullstart ?? lead.createtime;
+      if (!rawDate) continue; // no date → can't filter → skip to avoid garbage data
+
+      const leadTs =
+        typeof rawDate === "number"
+          ? rawDate
+          : Math.floor(new Date(rawDate).getTime() / 1000);
+      if (leadTs < startTs || leadTs > endTs) continue;
 
       const total = parseFloat(
         String(lead.total ?? lead.grandtotal ?? "0").replace(/[^0-9.-]/g, "")
