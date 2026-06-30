@@ -248,6 +248,46 @@ try {
   console.error('[startup] Data fix v5 error:', e.message);
 }
 
+// Data fix v6 — add Arianna as manager and reassign clients per June 2026 portfolio restructure
+try {
+  const fixed = sqlite.prepare("SELECT key FROM api_credentials WHERE id = 'data_fix_v6'").get();
+  if (!fixed) {
+    // Add Arianna if not already present
+    const ariannaExists = sqlite.prepare("SELECT id FROM managers WHERE id = 'arianna'").get();
+    if (!ariannaExists) {
+      sqlite.prepare(
+        "INSERT INTO managers (id, name, email, color) VALUES ('arianna', 'Arianna', 'arianna@bestlyfegroup.com', '#8B5CF6')"
+      ).run();
+    }
+
+    // Jarvis → Jan
+    const toJan = ['Bounce Orlando', 'Bounce Universe Party Rentals'];
+    const stmtJan = sqlite.prepare("UPDATE clients SET managerId = 'jan' WHERE name = ?");
+    for (const name of toJan) stmtJan.run(name);
+
+    // Jarvis → Adriana
+    const toAdriana = ['Funtime Services', 'Party Rentals R Us', 'All Fun Bouncing Inflatables'];
+    const stmtAdriana = sqlite.prepare("UPDATE clients SET managerId = 'adriana' WHERE name = ?");
+    for (const name of toAdriana) stmtAdriana.run(name);
+
+    // Adriana → Arianna
+    const adrianaToArianna = ['Acadiana Inflatables', 'CSE Services', 'Curlys', 'Just-A-Jumpin', 'Renfaye Lashes'];
+    const stmtArianna = sqlite.prepare("UPDATE clients SET managerId = 'arianna' WHERE name = ?");
+    for (const name of adrianaToArianna) stmtArianna.run(name);
+
+    // Jan → Arianna
+    const janToArianna = ['Blue Line Inflatables and Events', 'Sacramento Party Jumps', 'Bounce USA'];
+    for (const name of janToArianna) stmtArianna.run(name);
+
+    sqlite.prepare(
+      "INSERT INTO api_credentials (id, service, key, label, updated_at) VALUES ('data_fix_v6', 'system', '1', 'Data fix v6 applied — Arianna added, 10 clients reassigned', datetime('now'))"
+    ).run();
+    console.log('[startup] Data fix v6 applied — Arianna manager created, 10 clients reassigned.');
+  }
+} catch (e: any) {
+  console.error('[startup] Data fix v6 error:', e.message);
+}
+
 export interface IStorage {
   getManagers(): schema.Manager[];
   getManager(id: string): schema.Manager | undefined;
